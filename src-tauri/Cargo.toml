@@ -1,5 +1,5 @@
 [package]
-name = "tauri-app"
+name = "platy"
 version = "0.0.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -22,8 +22,8 @@ anyhow = "1.0.83"
 rubato = "0.15.0"
 
 [dependencies.tauri-plugin-sql]
-path = "../../plugins-workspace/plugins/sql"
-features = ["sqlite"]
+git = "https://github.com/tauri-apps/plugins-workspace"
+branch = "v2"
 
 [lib]
 name = "app_lib"

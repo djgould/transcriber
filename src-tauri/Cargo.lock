@@ -2624,6 +2624,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
+name = "platy"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "cpal",
+ "hound",
+ "rubato",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-sql",
+ "tokio",
+ "whisper-rs",
+]
+
+[[package]]
 name = "plist"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3505,8 +3522,6 @@ dependencies = [
  "sqlformat",
  "thiserror",
  "time",
- "tokio",
- "tokio-stream",
  "tracing",
  "url",
 ]
@@ -3546,7 +3561,6 @@ dependencies = [
  "sqlx-sqlite",
  "syn 1.0.109",
  "tempfile",
- "tokio",
  "url",
 ]
 
@@ -3884,23 +3898,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tauri-app"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "cpal",
- "hound",
- "rubato",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-sql",
- "tokio",
- "whisper-rs",
-]
-
-[[package]]
 name = "tauri-build"
 version = "2.0.0-beta.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3983,6 +3980,7 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-sql"
 version = "2.0.0-beta.4"
+source = "git+https://github.com/tauri-apps/plugins-workspace?branch=v2#224108818ddaff2fe36b8ac1c4c9707776902479"
 dependencies = [
  "futures-core",
  "log",
@@ -4217,17 +4215,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.63",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "267ac89e0bec6e691e5813911606935d77c476ff49024f98abcea3e7b15e37af"
-dependencies = [
- "futures-core",
- "pin-project-lite",
- "tokio",
 ]
 
 [[package]]
