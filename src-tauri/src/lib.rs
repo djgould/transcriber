@@ -20,6 +20,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tauri::Manager;
+use tauri_plugin_sql::PluginConfig;
 use tauri_plugin_sql::{Builder, Migration, MigrationKind};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -410,25 +411,19 @@ pub fn run() {
         Migration {
             version: 1,
             description: "create_initial_tables",
-            sql: "CREATE TABLE meetings (
-              id INTEGER PRIMARY KEY,
-              name TEXT NOT NULL,
-              transcription TEXT[] NOT NULL,  --- for storing an array of strings
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          );",
+            sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);",
             kind: MigrationKind::Up,
         },
         Migration {
-            version: 1,
-            description: "create_initial_tables",
+            version: 2,
+            description: "create_metting_table",
             sql: "CREATE TABLE meetings (
-              id INTEGER PRIMARY KEY,
-              name TEXT NOT NULL,
-              transcription TEXT[] NOT NULL,  --- for storing an array of strings
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          );",
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                transcription TEXT NOT NULL, -- Store JSON data as text
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );",
             kind: MigrationKind::Up,
         },
     ];

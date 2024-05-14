@@ -22,12 +22,13 @@ anyhow = "1.0.83"
 rubato = "0.15.0"
 
 [dependencies.tauri-plugin-sql]
+features = ["sqlite"]
 git = "https://github.com/tauri-apps/plugins-workspace"
 branch = "v2"
 
 [lib]
-name = "app_lib"
-crate-type = ["staticlib", "cdylib", "rlib", "lib"]
+name = "tauri_app_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

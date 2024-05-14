@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const isProd = process.env.NODE_ENV === 'production';
-
 let internalHost = null;
 
 if (!isProd) {
@@ -18,7 +17,8 @@ const nextConfig = {
     unoptimized: true,
   },
   // Configure assetPrefix or else the server won't properly resolve your assets.
-  assetPrefix: isProd ? null : `http://${internalHost}:3000`,
+  // assetPrefix: isProd ? null : `http://${internalHost}:3000`,
+  reactStrictMode: true,
 };
 
 export default nextConfig;

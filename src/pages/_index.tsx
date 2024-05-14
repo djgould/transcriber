@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 
-import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
-import { Button } from "@/components/ui/button";
+import { Button } from "../components/catalyst-ui/button";
 import {
   Table,
   TableBody,
@@ -11,9 +10,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "../components/catalyst-ui/table";
 import Database from "tauri-plugin-sql-api";
-import { useMeetings } from "@/hooks/useMeetings";
+import { createMeetingMutation, useMeetings } from "@/hooks/useMeetings";
+import { Link } from "@/components/catalyst-ui/link";
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);
@@ -21,6 +21,8 @@ function App() {
   const [loading, setLoading] = useState(false);
 
   const meetings = useMeetings();
+
+  const meetingMutation = createMeetingMutation();
 
   async function greet() {
     setLoading(true);
@@ -64,24 +66,24 @@ function App() {
           }}
         >
           <Button disabled={loading} type="submit">
-            {loading ? "Loading..." : "Transcribettt"}
+            {loading ? "Loading..." : "Transcribe"}
           </Button>
         </form>
       </header>
       <Table className="flex-grow flex-shrink overflow-y-scroll h-40">
         <TableHead>
           <TableRow>
-            <TableHeader>Speaker</TableHeader>
+            <TableHeader>Name</TableHeader>
             <TableHeader>Transcription</TableHeader>
           </TableRow>
         </TableHead>
         <TableBody>
-          {greetMsg.map((msg, i) => (
+          {meetings?.data?.map((meeting, i) => (
             <TableRow key={i}>
               <TableCell className="font-medium">
-                {i > 0 ? "<SPEAKER NEXT>" : "<SPEAKER 1>"}
+                <Link href={`/meetings/${meeting.id}`}>{meeting.name}</Link>
               </TableCell>
-              <TableCell>{msg}</TableCell>
+              <TableCell>{meeting.transcription}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -94,6 +96,7 @@ function App() {
           {isRecording ? "Stop Recording" : "Start Recording"}
         </Button>
         <Button onClick={() => setGreetMsg([])}>Clear</Button>
+        <Link href="/meetings/new">Create Meeting</Link>
       </footer>
     </div>
   );
