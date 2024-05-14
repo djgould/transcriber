@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import { Button } from "../components/ui/button";
 import {
   Table,
@@ -12,11 +12,32 @@ import {
   TableHeader,
   TableRow,
 } from "../components/ui/table";
+import Database from "tauri-plugin-sql-api";
+import { createMeetingMutation, useMeetings } from "@/hooks/useMeetings";
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [greetMsg, setGreetMsg] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const meetings = useMeetings();
+
+  const meetingMutation = createMeetingMutation();
+
+  useEffect(() => {
+    async function loadDb() {
+      console.log("loading db");
+      try {
+        const db = await Database.load("sqlite:test.db");
+        console.log(await db.select("./tables"));
+      } catch (e) {
+        console.log(e);
+      }
+      console.log("loaded db");
+    }
+
+    loadDb();
+  }, []);
 
   async function greet() {
     setLoading(true);
@@ -60,24 +81,22 @@ function App() {
           }}
         >
           <Button disabled={loading} type="submit">
-            {loading ? "Loading..." : "Transcribe"}
+            {loading ? "Loading..." : "Transcribeppp"}
           </Button>
         </form>
       </header>
       <Table className="flex-grow flex-shrink overflow-y-scroll h-40">
         <TableHead>
           <TableRow>
-            <TableHeader>Speaker</TableHeader>
+            <TableHeader>Name</TableHeader>
             <TableHeader>Transcription</TableHeader>
           </TableRow>
         </TableHead>
         <TableBody>
-          {greetMsg.map((msg, i) => (
+          {meetings?.data?.map((meeting, i) => (
             <TableRow key={i}>
-              <TableCell className="font-medium">
-                {i > 0 ? "<SPEAKER NEXT>" : "<SPEAKER 1>"}
-              </TableCell>
-              <TableCell>{msg}</TableCell>
+              <TableCell className="font-medium">{meeting.name}</TableCell>
+              <TableCell>{meeting.transription}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -90,6 +109,7 @@ function App() {
           {isRecording ? "Stop Recording" : "Start Recording"}
         </Button>
         <Button onClick={() => setGreetMsg([])}>Clear</Button>
+        <Button onClick={() => meetingMutation.mutate()}>Create Meeting</Button>
       </footer>
     </div>
   );

@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/tauri";
-import { Button } from "../components/ui/button";
+import { invoke } from "@tauri-apps/api/core";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -11,12 +11,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../components/ui/table";
+} from "@/components/ui/table";
+import Database from "tauri-plugin-sql-api";
+import { useMeetings } from "@/hooks/useMeetings";
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [greetMsg, setGreetMsg] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const meetings = useMeetings();
 
   async function greet() {
     setLoading(true);
@@ -60,7 +64,7 @@ function App() {
           }}
         >
           <Button disabled={loading} type="submit">
-            {loading ? "Loading..." : "Transcribe"}
+            {loading ? "Loading..." : "Transcribettt"}
           </Button>
         </form>
       </header>

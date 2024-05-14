@@ -8,10 +8,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "1", features = [] }
+tauri-build = { version = "2.0.0-beta", features = [] }
 
 [dependencies]
-tauri = { version = "1", features = [] }
+tauri = { version = "2.0.0-beta", features = [] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 serde_json = "1"
@@ -22,9 +22,12 @@ anyhow = "1.0.83"
 rubato = "0.15.0"
 
 [dependencies.tauri-plugin-sql]
-git = "https://github.com/tauri-apps/plugins-workspace"
-branch = "v1"
+path = "../../plugins-workspace/plugins/sql"
 features = ["sqlite"]
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib", "lib"]
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
