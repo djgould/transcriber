@@ -1,9 +1,12 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod audio_controller;
+
 use anyhow::anyhow;
 use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::DevicesError;
 use cpal::Stream;
 use hound::{SampleFormat, WavReader, WavSpec, WavWriter};
 use rubato::{
@@ -12,6 +15,7 @@ use rubato::{
 use serde::Serialize;
 use std::fs::File;
 use std::io::BufWriter;
+use std::io::Write;
 use std::ops::Deref;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -198,94 +202,6 @@ struct Error {
     message: String,
 }
 
-struct Recorder {
-    writer: Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>,
-    stream: Option<Stream>,
-}
-
-impl Recorder {
-    fn new() -> Result<Self> {
-        let host = cpal::default_host();
-        let device = host
-            .default_input_device()
-            .expect("No input device available");
-        let config = device.default_input_config()?;
-
-        let spec = WavSpec {
-            channels: config.channels(),
-            sample_rate: config.sample_rate().0,
-            bits_per_sample: 16,
-            sample_format: hound::SampleFormat::Int,
-        };
-
-        let writer = Arc::new(Mutex::new(None));
-
-        Ok(Self {
-            writer: writer,
-            stream: None,
-        })
-    }
-
-    fn start(&mut self) -> Result<()> {
-        let device = cpal::default_host()
-            .default_input_device()
-            .expect("No input device available");
-        let config = device.default_input_config()?;
-
-        let spec = WavSpec {
-            channels: config.channels(),
-            sample_rate: config.sample_rate().0,
-            bits_per_sample: 16,
-            sample_format: hound::SampleFormat::Int,
-        };
-        self.writer = Arc::new(Mutex::new(Some(WavWriter::create("output.wav", spec)?)));
-
-        let writer_clone = self.writer.clone();
-        let stream = device.build_input_stream(
-            &config.into(),
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                if let Ok(mut writer_lock) = writer_clone.lock() {
-                    if let Some(ref mut writer) = *writer_lock {
-                        for &sample in data {
-                            let amplitude = (sample * i16::MAX as f32) as i16;
-                            writer
-                                .write_sample(amplitude)
-                                .expect("Failed to write sample");
-                        }
-                    }
-                }
-            },
-            |err| eprintln!("Error: {:?}", err),
-            Some(std::time::Duration::from_secs(30)),
-        )?;
-
-        stream.play()?;
-        self.stream = Some(stream);
-        Ok(())
-    }
-
-    fn stop(&mut self) -> Result<()> {
-        if let Some(stream) = self.stream.take() {
-            stream.pause()?;
-            drop(stream);
-        }
-
-        // Take out the WavWriter, finalize it, and replace with None
-        let maybe_writer = {
-            let mut writer_lock = self.writer.lock().unwrap();
-            writer_lock.take() // This takes the WavWriter out and leaves None in its place
-        };
-
-        if let Some(mut writer) = maybe_writer {
-            writer.finalize()?; // Now you can finalize without moving out of the MutexGuard
-        }
-
-        Ok(())
-    }
-}
-
-pub struct RecorderState(Mutex<Recorder>);
-
 impl From<anyhow::Error> for Error {
     fn from(err: anyhow::Error) -> Self {
         Error {
@@ -294,54 +210,13 @@ impl From<anyhow::Error> for Error {
     }
 }
 
-enum AudioCommand {
-    Start,
-    Stop,
-}
-
-struct AudioController {
-    sender: Sender<AudioCommand>,
-}
-
-impl AudioController {
-    fn new() -> Self {
-        let (sender, receiver) = mpsc::channel();
-        thread::spawn(move || {
-            let mut recorder = Recorder::new().expect("Failed to initialize the recorder");
-            for command in receiver {
-                match command {
-                    AudioCommand::Start => {
-                        recorder.start().expect("Failed to start recording");
-                    }
-                    AudioCommand::Stop => {
-                        recorder.stop().expect("Failed to stop recording");
-                    }
-                }
-            }
-        });
-        AudioController { sender }
-    }
-
-    fn start(&self) {
-        self.sender
-            .send(AudioCommand::Start)
-            .expect("Failed to send start command");
-    }
-
-    fn stop(&self) {
-        self.sender
-            .send(AudioCommand::Stop)
-            .expect("Failed to send stop command");
-    }
-}
-
 #[tauri::command]
-fn start_recording(audio_controller: tauri::State<'_, Arc<AudioController>>) {
+fn start_recording(audio_controller: tauri::State<'_, Arc<audio_controller::AudioController>>) {
     audio_controller.start();
 }
 
 #[tauri::command]
-fn stop_recording(audio_controller: tauri::State<'_, Arc<AudioController>>) {
+fn stop_recording(audio_controller: tauri::State<'_, Arc<audio_controller::AudioController>>) {
     audio_controller.stop();
 }
 
@@ -427,7 +302,8 @@ pub fn run() {
             kind: MigrationKind::Up,
         },
     ];
-    let audio_controller = Arc::new(AudioController::new());
+
+    let audio_controller = Arc::new(audio_controller::AudioController::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -442,7 +318,6 @@ pub fn run() {
             transcribe,
             start_recording,
             stop_recording,
-            record
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

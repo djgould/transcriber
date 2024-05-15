@@ -10,6 +10,12 @@ import {
 import { useRouter } from "next/router";
 import React from "react";
 
+const breadcrumbConfig: { [key: string]: string } = {
+  "": "Dashboard",
+  conversations: "Conversations",
+  "conversations/new": "New Conversation",
+};
+
 function generateBreadcrumbs(pathname: string) {
   if (pathname === "/") {
     return (
@@ -21,24 +27,31 @@ function generateBreadcrumbs(pathname: string) {
 
   const pathSegments = pathname.split("/").filter((segment) => segment);
 
-  return pathSegments.map((segment, index, arr) => {
-    const href = "/" + arr.slice(0, index + 1).join("/");
-    const isLast = index === arr.length - 1;
-    return (
-      <React.Fragment key={href}>
-        <BreadcrumbItem>
-          {isLast ? (
-            <BreadcrumbPage>{segment}</BreadcrumbPage>
-          ) : (
-            <BreadcrumbLink asChild>
-              <Link href={href}>{segment}</Link>
-            </BreadcrumbLink>
-          )}
-        </BreadcrumbItem>
-        {!isLast && <BreadcrumbSeparator />}
-      </React.Fragment>
-    );
-  });
+  return (
+    <BreadcrumbList>
+      {pathSegments.map((segment, index, arr) => {
+        const href = "/" + arr.slice(0, index + 1).join("/");
+        const isLast = index === arr.length - 1;
+        const label =
+          breadcrumbConfig[arr.slice(0, index + 1).join("/")] || segment;
+
+        return (
+          <React.Fragment key={href}>
+            <BreadcrumbItem>
+              {isLast ? (
+                <BreadcrumbPage>{label}</BreadcrumbPage>
+              ) : (
+                <BreadcrumbLink asChild>
+                  <Link href={href}>{label}</Link>
+                </BreadcrumbLink>
+              )}
+            </BreadcrumbItem>
+            {!isLast && <BreadcrumbSeparator />}
+          </React.Fragment>
+        );
+      })}
+    </BreadcrumbList>
+  );
 }
 
 export default function BreadcrumbNav() {

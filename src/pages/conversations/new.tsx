@@ -12,7 +12,8 @@ import {
 import { Circle, Speaker } from "lucide-react";
 import { useRouter } from "next/router";
 import { Slider } from "@/components/ui/slider";
-import AudioRecorder from "@/hooks/useMediaRecorder";
+import AudioRecorder from "@/components/audio-recorder/AudioRecorder";
+import { Separator } from "@/components/ui/separator";
 
 const transcript = [
   {
@@ -54,13 +55,13 @@ const transcript = [
 
 export default function Page() {
   return (
-    <div className="p-2">
-      <Link href="/">Back</Link>
+    <div className="p-2 h-screen">
       <Card>
         <CardHeader>
           <CardTitle>Your Converstation</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-y-scroll">
+          <Separator />
           {transcript.map((slice, i) => (
             <div className="mt-2 flex flex-col" key={slice.text}>
               <p>{slice.speaker}</p> <p>{slice.text}</p>
@@ -68,10 +69,8 @@ export default function Page() {
           ))}
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
-          <Slider value={[50, 0]} />
-          <Button variant="outline">
-            <Circle className="text-red-800" />
-          </Button>
+          <Separator />
+
           <AudioRecorder />
         </CardFooter>
       </Card>
