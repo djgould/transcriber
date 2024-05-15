@@ -17,6 +17,13 @@
     "sql:allow-select",
     "sql:allow-execute",
     "webview:default",
-    "webview:allow-internal-toggle-devtools"
+    "webview:allow-internal-toggle-devtools",
+    "fs:default",
+    "dialog:default",
+    "dialog:allow-save",
+    "fs:allow-app-write",
+    "fs:allow-app-write-recursive",
+    "fs:allow-appcache-write",
+    "fs:allow-appcache-write-recursive"
   ]
 }

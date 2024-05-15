@@ -430,6 +430,8 @@ pub fn run() {
     let audio_controller = Arc::new(AudioController::new());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:test.db", migrations)

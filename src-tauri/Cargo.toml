@@ -20,6 +20,8 @@ hound = "3.5.1"
 cpal = "0.15.3"
 anyhow = "1.0.83"
 rubato = "0.15.0"
+tauri-plugin-fs = "2.0.0-beta.7"
+tauri-plugin-dialog = "2.0.0-beta.7"
 
 [dependencies.tauri-plugin-sql]
 features = ["sqlite"]

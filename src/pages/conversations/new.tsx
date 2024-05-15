@@ -1,3 +1,4 @@
+"use client";
 import { Link } from "@/components/catalyst-ui/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +12,7 @@ import {
 import { Circle, Speaker } from "lucide-react";
 import { useRouter } from "next/router";
 import { Slider } from "@/components/ui/slider";
+import AudioRecorder from "@/hooks/useMediaRecorder";
 
 const transcript = [
   {
@@ -57,11 +59,10 @@ export default function Page() {
       <Card>
         <CardHeader>
           <CardTitle>Your Converstation</CardTitle>
-          <CardDescription>Card Description</CardDescription>
         </CardHeader>
         <CardContent>
-          {transcript.map((slice) => (
-            <div className="mt-2 flex flex-col">
+          {transcript.map((slice, i) => (
+            <div className="mt-2 flex flex-col" key={slice.text}>
               <p>{slice.speaker}</p> <p>{slice.text}</p>
             </div>
           ))}
@@ -71,6 +72,7 @@ export default function Page() {
           <Button variant="outline">
             <Circle className="text-red-800" />
           </Button>
+          <AudioRecorder />
         </CardFooter>
       </Card>
     </div>
