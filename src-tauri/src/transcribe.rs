@@ -52,7 +52,7 @@ impl Transcriber {
     }
 
     pub fn run(&self) {
-        self.transcribe(self.receiver.clone());
+        self.live_transcribe(self.receiver.clone());
     }
 
     pub fn add_chunk(&self, audio_data: Vec<f32>) -> Result<(), String> {
@@ -63,7 +63,7 @@ impl Transcriber {
         Ok(())
     }
 
-    fn transcribe(&self, rx: Arc<Receiver<Vec<f32>>>) {
+    fn live_transcribe(&self, rx: Arc<Receiver<Vec<f32>>>) {
         thread::spawn(move || {
             use std::path::Path;
 

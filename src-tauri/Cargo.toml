@@ -15,6 +15,7 @@ tauri = { version = "2.0.0-beta", features = [] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 serde_json = "1"
+ffmpeg-sidecar = "0.5.1"
 whisper-rs = { git = "https://github.com/tazz4843/whisper-rs", branch = "master" }
 hound = "3.5.1"
 cpal = "0.15.3"
@@ -23,6 +24,8 @@ rubato = "0.15.0"
 tauri-plugin-fs = "2.0.0-beta.7"
 tauri-plugin-dialog = "2.0.0-beta.7"
 flume = "0.11.0"
+futures = "0.3.30"
+byteorder = "1.5.0"
 
 [dependencies.tauri-plugin-sql]
 features = ["sqlite"]

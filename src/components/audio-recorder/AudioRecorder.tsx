@@ -16,11 +16,11 @@ import { useLiveTranscription } from "@/hooks/useTranscription";
 
 function AudioRecorder() {
   const [isRecording, setIsRecording] = useState(false);
-  const liveTranscription = useLiveTranscription(isRecording);
-
   const startRecording = async () => {
     setIsRecording(true);
-    await invoke("start_recording").catch(() => setIsRecording(false));
+    await invoke("start_recording", {
+      options: { user_id: "1", audio_name: "name" },
+    }).catch(() => setIsRecording(false));
   };
 
   const stopRecording = () => {

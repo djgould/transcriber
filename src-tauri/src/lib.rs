@@ -1,33 +1,45 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod audio_controller;
-mod transcribe;
+mod media;
+mod recorder;
+mod utils;
 
-use anyhow::anyhow;
 use anyhow::Result;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::DevicesError;
 use cpal::Stream;
+use ffmpeg_sidecar::command::ffmpeg_is_installed;
+use ffmpeg_sidecar::download::check_latest_version;
+use ffmpeg_sidecar::download::download_ffmpeg_package;
+use ffmpeg_sidecar::download::ffmpeg_download_url;
+use ffmpeg_sidecar::download::unpack_ffmpeg;
+use ffmpeg_sidecar::error::Result as FfmpegResult;
+use ffmpeg_sidecar::paths::sidecar_dir;
+use ffmpeg_sidecar::version::ffmpeg_version;
 use hound::{SampleFormat, WavReader, WavSpec, WavWriter};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 use serde::Serialize;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::BufWriter;
 use std::io::Write;
 use std::ops::Deref;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
-use tauri::Manager;
+use tauri::{Manager, State};
 use tauri_plugin_sql::PluginConfig;
 use tauri_plugin_sql::{Builder, Migration, MigrationKind};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+
+use recorder::{start_recording, stop_recording, RecordingState, TranscriptionJSON};
 
 fn parse_wav_file(path: &Path) -> Vec<i16> {
     let reader = WavReader::open(path).expect("failed to read file");
@@ -128,89 +140,138 @@ fn resample_audio(
         .collect();
 }
 
-// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-#[tauri::command]
-async fn transcribe(path: String) -> Result<Vec<String>, String> {
-    tokio::task::spawn_blocking(move || {
-        use std::path::Path;
+// // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
+// #[tauri::command]
+// async fn transcribe(path: String) -> Result<Vec<String>, String> {
+//     tokio::task::spawn_blocking(move || {
+//         use std::path::Path;
 
-        println!("Path: {}", path);
-        let audio_path = Path::new("/Users/devingould/platy/src-tauri/src/samples/a13.wav");
-        if !audio_path.exists() {
-            panic!("audio file doesn't exist");
+//         println!("Path: {}", path);
+//         let audio_path = Path::new("/Users/devingould/platy/src-tauri/src/samples/a13.wav");
+//         if !audio_path.exists() {
+//             panic!("audio file doesn't exist");
+//         }
+//         let whisper_path =
+//             Path::new("/Users/devingould/platy/src-tauri/src/models/ggml-small.en-tdrz.bin");
+//         if !whisper_path.exists() {
+//             panic!("whisper file doesn't exist");
+//         }
+
+//         // Assuming parse_wav_file and other functions are correctly defined elsewhere
+//         let original_samples = parse_and_resample_wav_file(audio_path, 16000.0);
+//         let mut samples = vec![0.0f32; original_samples.len()];
+//         whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
+//             .expect("failed to convert samples");
+
+//         let ctx = WhisperContext::new_with_params(
+//             &whisper_path.to_string_lossy(),
+//             WhisperContextParameters::default(),
+//         )
+//         .expect("failed to open model");
+//         let mut state = ctx.create_state().expect("failed to create state");
+//         let mut params = FullParams::new(SamplingStrategy::default());
+//         params.set_initial_prompt("experience");
+//         params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
+//         params.set_tdrz_enable(true);
+
+//         let st = std::time::Instant::now();
+//         state
+//             .full(params, &samples)
+//             .expect("failed to transcribe audio");
+
+//         let et = std::time::Instant::now();
+
+//         let num_segments = state
+//             .full_n_segments()
+//             .expect("failed to get number of segments");
+//         let mut full_text: Vec<String> = vec![String::new()];
+//         let mut full_text_index = 0;
+//         for i in 0..num_segments {
+//             let segment = state
+//                 .full_get_segment_text(i)
+//                 .expect("failed to get segment");
+//             full_text[full_text_index].push_str(&segment);
+//             if (state.full_get_segment_speaker_turn_next(i)) {
+//                 full_text.push(String::new());
+//                 full_text_index += 1
+//             }
+//             let start_timestamp = state
+//                 .full_get_segment_t0(i)
+//                 .expect("failed to get start timestamp");
+//             let end_timestamp = state
+//                 .full_get_segment_t1(i)
+//                 .expect("failed to get end timestamp");
+//             println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
+//         }
+//         println!("Transcription took {}ms", (et - st).as_millis());
+//         Ok(full_text)
+//     })
+//     .await
+//     .map_err(|e| e.to_string())?
+// }
+
+// #[tauri::command]
+// fn start_recording(audio_controller: tauri::State<'_, Arc<audio_controller::AudioController>>) {
+//     audio_controller.start();
+// }
+
+// #[tauri::command]
+// fn stop_recording(audio_controller: tauri::State<'_, Arc<audio_controller::AudioController>>) {
+//     audio_controller.stop();
+// }
+
+#[tauri::command]
+async fn get_real_time_transcription(
+    state: tauri::State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+) -> Result<TranscriptionJSON, String> {
+    let mut state_guard = state.lock().await;
+
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+
+    let data_dir = match &state_guard.data_dir {
+        Some(dir) => dir,
+        None => return Err("Data directory not set".to_string()),
+    };
+
+    let audio_dir = data_dir.join("chunks/audio");
+
+    let mut paths: Vec<PathBuf> = match fs::read_dir(audio_dir) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .collect(),
+        Err(err) => return Err(format!("Failed to read directory: {}", err)),
+    };
+
+    paths.sort_by(|a, b| {
+        let a_name = a.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let b_name = b.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        a_name.cmp(b_name)
+    });
+
+    let mut merged_content = TranscriptionJSON {
+        full_text: Vec::new(),
+    };
+
+    for path in paths {
+        println!("Reading file {}", path.display());
+
+        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            let content = fs::read_to_string(&path)
+                .map_err(|err| format!("Failed to read file {}: {}", path.display(), err))?;
+
+            let json_content: TranscriptionJSON =
+                serde_json::from_str(&content).map_err(|err| {
+                    format!("Failed to parse JSON in file {}: {}", path.display(), err)
+                })?;
+
+            println!("{}", content);
+
+            merged_content.full_text.extend(json_content.full_text);
         }
-        let whisper_path =
-            Path::new("/Users/devingould/platy/src-tauri/src/models/ggml-small.en-tdrz.bin");
-        if !whisper_path.exists() {
-            panic!("whisper file doesn't exist");
-        }
+    }
 
-        // Assuming parse_wav_file and other functions are correctly defined elsewhere
-        let original_samples = parse_and_resample_wav_file(audio_path, 16000.0);
-        let mut samples = vec![0.0f32; original_samples.len()];
-        whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
-            .expect("failed to convert samples");
-
-        let ctx = WhisperContext::new_with_params(
-            &whisper_path.to_string_lossy(),
-            WhisperContextParameters::default(),
-        )
-        .expect("failed to open model");
-        let mut state = ctx.create_state().expect("failed to create state");
-        let mut params = FullParams::new(SamplingStrategy::default());
-        params.set_initial_prompt("experience");
-        params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
-        params.set_tdrz_enable(true);
-
-        let st = std::time::Instant::now();
-        state
-            .full(params, &samples)
-            .expect("failed to transcribe audio");
-
-        let et = std::time::Instant::now();
-
-        let num_segments = state
-            .full_n_segments()
-            .expect("failed to get number of segments");
-        let mut full_text: Vec<String> = vec![String::new()];
-        let mut full_text_index = 0;
-        for i in 0..num_segments {
-            let segment = state
-                .full_get_segment_text(i)
-                .expect("failed to get segment");
-            full_text[full_text_index].push_str(&segment);
-            if (state.full_get_segment_speaker_turn_next(i)) {
-                full_text.push(String::new());
-                full_text_index += 1
-            }
-            let start_timestamp = state
-                .full_get_segment_t0(i)
-                .expect("failed to get start timestamp");
-            let end_timestamp = state
-                .full_get_segment_t1(i)
-                .expect("failed to get end timestamp");
-            println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
-        }
-        println!("Transcription took {}ms", (et - st).as_millis());
-        Ok(full_text)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-fn start_recording(audio_controller: tauri::State<'_, Arc<audio_controller::AudioController>>) {
-    audio_controller.start();
-}
-
-#[tauri::command]
-fn stop_recording(audio_controller: tauri::State<'_, Arc<audio_controller::AudioController>>) {
-    audio_controller.stop();
-}
-
-#[tauri::command]
-fn get_real_time_transcription() {
-    unimplemented!()
+    Ok(merged_content)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -237,10 +298,40 @@ pub fn run() {
         },
     ];
 
-    let transcriber_controller = Arc::new(transcribe::TranscriberController::new());
-    let audio_controller = Arc::new(audio_controller::AudioController::new(
-        &transcriber_controller,
-    ));
+    fn handle_ffmpeg_installation() -> FfmpegResult<()> {
+        if ffmpeg_is_installed() {
+            println!("FFmpeg is already installed! 🎉");
+            return Ok(());
+        }
+
+        match check_latest_version() {
+            Ok(version) => println!("Latest available version: {}", version),
+            Err(_) => println!("Skipping version check on this platform."),
+        }
+
+        let download_url = ffmpeg_download_url()?;
+        let destination = sidecar_dir()?;
+
+        println!("Downloading from: {:?}", download_url);
+        let archive_path = download_ffmpeg_package(download_url, &destination)?;
+        println!("Downloaded package: {:?}", archive_path);
+
+        println!("Extracting...");
+        unpack_ffmpeg(&archive_path, &destination)?;
+
+        let version = ffmpeg_version()?;
+        println!("FFmpeg version: {}", version);
+
+        println!("Done! 🏁");
+        Ok(())
+    }
+
+    handle_ffmpeg_installation().expect("Failed to install FFmpeg");
+
+    // let transcriber_controller = Arc::new(transcribe::TranscriberController::new());
+    // let audio_controller = Arc::new(audio_controller::AudioController::new(
+    //     &transcriber_controller,
+    // ));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -250,10 +341,26 @@ pub fn run() {
                 .add_migrations("sqlite:test.db", migrations)
                 .build(),
         )
-        .manage(audio_controller)
-        .manage(transcriber_controller)
+        .setup(move |app| {
+            let handle = app.handle();
+
+            let data_directory = handle.path().app_data_dir().unwrap();
+
+            let recording_state = RecordingState {
+                media_process: None,
+                recording_options: None,
+                shutdown_flag: Arc::new(AtomicBool::new(false)),
+                audio_uploading_finished: Arc::new(AtomicBool::new(false)),
+                data_dir: Some(data_directory),
+            };
+
+            app.manage(Arc::new(tauri::async_runtime::Mutex::new(recording_state)));
+
+            Ok(())
+        })
+        // .manage(audio_controller)
+        // .manage(transcriber_controller)
         .invoke_handler(tauri::generate_handler![
-            transcribe,
             start_recording,
             stop_recording,
             get_real_time_transcription,

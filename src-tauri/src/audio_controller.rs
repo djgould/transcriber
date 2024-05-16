@@ -16,6 +16,28 @@ struct Recorder {
     stream: Option<Stream>,
 }
 
+// fn clean_and_create_dir(dir: &Path) -> Result<(), String> {
+//     if dir.exists() {
+//         // Instead of just reading the directory, this will also handle subdirectories.
+//         std::fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+//     }
+//     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+
+//     if !dir.to_string_lossy().contains("screenshots") {
+//         let segment_list_path = dir.join("segment_list.txt");
+//         match File::open(&segment_list_path) {
+//             Ok(_) => Ok(()),
+//             Err(ref e) if e.kind() == ErrorKind::NotFound => {
+//                 File::create(&segment_list_path).map_err(|e| e.to_string())?;
+//                 Ok(())
+//             }
+//             Err(e) => Err(e.to_string()),
+//         }
+//     } else {
+//         Ok(())
+//     }
+// }
+
 impl Recorder {
     fn new() -> Result<Self> {
         let writer = Arc::new(Mutex::new(None));

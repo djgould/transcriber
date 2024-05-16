@@ -14,6 +14,7 @@ import { useRouter } from "next/router";
 import { Slider } from "@/components/ui/slider";
 import AudioRecorder from "@/components/audio-recorder/AudioRecorder";
 import { Separator } from "@/components/ui/separator";
+import { useLiveTranscription } from "@/hooks/useTranscription";
 
 const transcript = [
   {
@@ -54,6 +55,8 @@ const transcript = [
 ];
 
 export default function Page() {
+  const liveTranscription = useLiveTranscription(true);
+
   return (
     <div className="p-2 h-screen">
       <Card>
@@ -62,9 +65,9 @@ export default function Page() {
         </CardHeader>
         <CardContent className="overflow-y-scroll">
           <Separator />
-          {transcript.map((slice, i) => (
-            <div className="mt-2 flex flex-col" key={slice.text}>
-              <p>{slice.speaker}</p> <p>{slice.text}</p>
+          {liveTranscription.data?.full_text?.map((slice, i) => (
+            <div className="mt-2 flex flex-col" key={slice}>
+              <p>{slice}</p>
             </div>
           ))}
         </CardContent>
