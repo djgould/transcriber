@@ -13,9 +13,13 @@ use std::sync::{
 use std::time::Duration;
 use tauri::async_runtime::Mutex;
 use tauri::State;
+use tauri_plugin_fs::init;
+use tokio::process::Command;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 use crate::media::MediaRecorder;
+use crate::utils::ffmpeg_path_as_str;
+use tokio::io::AsyncWriteExt;
 
 pub struct RecordingState {
     pub media_process: Option<MediaRecorder>,
@@ -91,6 +95,78 @@ pub async fn start_recording(
     }
     Ok(())
 }
+use tokio::io::AsyncBufReadExt;
+
+async fn combine_segments(
+    audio_chunks_dir: PathBuf,
+) -> Result<tokio::process::Child, std::io::Error> {
+    let ffmpeg_binary_path_str = ffmpeg_path_as_str().unwrap().to_owned();
+
+    let segment_list_path = audio_chunks_dir.join("segment_list.txt");
+
+    // Read each line (segment file path) from the segment list file
+    let segment_files: Vec<String> = match std::fs::read_to_string(&segment_list_path) {
+        Ok(content) => Some(
+            content
+                .lines()
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<String>>(),
+        ),
+        Err(e) => {
+            eprintln!("Failed to read segment list: {}", e);
+            None
+        }
+    }
+    .expect("Failed to read segment list. This should never happen. Please report this bug.");
+
+    // Ensure there are segments to combine
+    if segment_files.is_empty() {
+        eprintln!("No segments found to combine.");
+    }
+
+    let concat_file_path = audio_chunks_dir.join("concat.txt").clone();
+    let combined_output_file_path = audio_chunks_dir.join("combined.wav");
+
+    write_concat_file(&concat_file_path, &segment_files);
+
+    let args = vec![
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        concat_file_path.to_str().unwrap(),
+        "-c",
+        "copy",
+        combined_output_file_path.to_str().unwrap(),
+    ];
+
+    // Print the generated args for debugging
+    println!("FFmpeg args: {:?}", args);
+
+    let mut process = Command::new(ffmpeg_binary_path_str).args(args).spawn()?;
+
+    if let Some(process_stderr) = process.stderr.take() {
+        tokio::spawn(async move {
+            use tokio::io::BufReader;
+
+            let mut process_reader = BufReader::new(process_stderr).lines();
+            while let Ok(Some(line)) = process_reader.next_line().await {
+                eprintln!("FFmpeg process STDERR: {}", line);
+            }
+        });
+    }
+
+    Ok(process)
+}
+
+fn write_concat_file(concat_file_path: &PathBuf, segment_files: &Vec<String>) -> io::Result<()> {
+    let mut output_file = File::create(concat_file_path)?;
+    for segment_file in segment_files {
+        output_file.write_all(format!("file '{}'\n", segment_file).as_bytes());
+    }
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Result<(), String> {
@@ -107,6 +183,12 @@ pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Res
             .await
             .expect("Failed to stop media recording");
     }
+
+    let data_dir = guard.data_dir.clone();
+
+    combine_segments(data_dir.expect("no data directory").join("chunks/audio"))
+        .await
+        .map_err(|e| e.to_string())?;
 
     // let is_local_mode = match dotenv_codegen::dotenv!("NEXT_PUBLIC_LOCAL_MODE") {
     //     "true" => true,
