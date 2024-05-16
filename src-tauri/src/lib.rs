@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio_controller;
+mod transcribe;
 
 use anyhow::anyhow;
 use anyhow::Result;
@@ -197,19 +198,6 @@ async fn transcribe(path: String) -> Result<Vec<String>, String> {
     .map_err(|e| e.to_string())?
 }
 
-#[derive(Debug, Serialize)]
-struct Error {
-    message: String,
-}
-
-impl From<anyhow::Error> for Error {
-    fn from(err: anyhow::Error) -> Self {
-        Error {
-            message: err.to_string(),
-        }
-    }
-}
-
 #[tauri::command]
 fn start_recording(audio_controller: tauri::State<'_, Arc<audio_controller::AudioController>>) {
     audio_controller.start();
@@ -221,62 +209,8 @@ fn stop_recording(audio_controller: tauri::State<'_, Arc<audio_controller::Audio
 }
 
 #[tauri::command]
-fn record() -> Result<(), Error> {
-    println!("recording");
-    let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .expect("no output device available");
-    println!("{:#?}", device.name());
-    let supported_formats_range = device.supported_input_configs().map_err(|e| anyhow!(e))?;
-
-    for format in supported_formats_range {
-        println!("{:?}", format);
-    }
-    let config = device.default_input_config().map_err(|e| anyhow!(e))?;
-
-    // Define WAV file specifications
-    let spec = WavSpec {
-        channels: config.channels(),
-        sample_rate: config.sample_rate().0,
-        bits_per_sample: 16,
-        sample_format: hound::SampleFormat::Int,
-    };
-
-    let writer: Arc<Mutex<WavWriter<std::io::BufWriter<std::fs::File>>>> = Arc::new(Mutex::new(
-        WavWriter::create("output.wav", spec).map_err(|e| anyhow!(e))?,
-    ));
-
-    let writer_clone = writer.clone();
-    let stream = device
-        .build_input_stream(
-            &config.into(),
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let mut writer = writer_clone.lock().unwrap();
-                for &sample in data {
-                    let amplitude = (sample * i16::MAX as f32) as i16; // convert f32 audio samples to i16
-                    writer
-                        .write_sample(amplitude)
-                        .expect("Failed to write sample");
-                }
-            },
-            |err| {
-                eprintln!("Error: {:?}", err);
-            },
-            Some(std::time::Duration::from_secs(30)), // Set a timeout of 30 seconds
-        )
-        .map_err(|e| anyhow!(e))?;
-
-    stream.play().map_err(|e| anyhow!(e))?;
-
-    // Record for a specific duration
-    std::thread::sleep(std::time::Duration::from_secs(10));
-
-    // Finalize the WAV file
-    drop(stream);
-    drop(writer);
-
-    Ok(())
+fn get_real_time_transcription() {
+    unimplemented!()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -318,6 +252,7 @@ pub fn run() {
             transcribe,
             start_recording,
             stop_recording,
+            get_real_time_transcription,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

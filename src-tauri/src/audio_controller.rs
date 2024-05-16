@@ -16,19 +16,6 @@ struct Recorder {
 
 impl Recorder {
     fn new() -> Result<Self> {
-        let host = cpal::default_host();
-        let device = host
-            .default_input_device()
-            .expect("No input device available");
-        let config = device.default_input_config()?;
-
-        let spec = WavSpec {
-            channels: config.channels(),
-            sample_rate: config.sample_rate().0,
-            bits_per_sample: 16,
-            sample_format: hound::SampleFormat::Int,
-        };
-
         let writer = Arc::new(Mutex::new(None));
 
         Ok(Self {
@@ -65,7 +52,7 @@ impl Recorder {
                 }
             },
             |err| eprintln!("Error: {:?}", err),
-            Some(std::time::Duration::from_secs(30)),
+            Some(std::time::Duration::from_secs(300)),
         )?;
 
         stream.play()?;
@@ -93,8 +80,6 @@ impl Recorder {
         Ok(())
     }
 }
-
-pub struct RecorderState(Mutex<Recorder>);
 
 enum AudioCommand {
     Start,
