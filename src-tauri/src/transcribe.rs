@@ -29,6 +29,12 @@ impl TranscriberController {
         });
         TranscriberController { sender }
     }
+
+    pub fn add_chunk(&self, audio_data: Vec<f32>) {
+        self.sender
+            .send(TranscriberCommand::Data(audio_data))
+            .expect("Failed to send start command");
+    }
 }
 
 struct Transcriber {
@@ -50,6 +56,7 @@ impl Transcriber {
     }
 
     pub fn add_chunk(&self, audio_data: Vec<f32>) -> Result<(), String> {
+        println!("got chunk");
         self.sender
             .send(audio_data)
             .map_err(|_| "Failed to send data to transcriber")?;
@@ -73,17 +80,20 @@ impl Transcriber {
             .expect("failed to open model");
             let mut state = ctx.create_state().expect("failed to create state");
             let mut sample_old: Vec<f32> = Vec::new();
-            let step_size = 3000; // in milliseconds
-            let sample_rate = 16000;
-            let n_samples_step = step_size * sample_rate / 1000;
-            let n_samples_keep = 200; // in milliseconds
-            let n_samples_keep = n_samples_keep * sample_rate / 1000;
-
+            let step_size: usize = 3000; // in milliseconds
+            let sample_rate: usize = 16000;
+            let n_samples_step: usize = step_size * sample_rate / 1000;
+            let n_samples_keep: usize = 200; // in milliseconds
+            let n_samples_keep: usize = n_samples_keep * sample_rate / 1000;
+            println!("transcriber starting");
             while let Ok(sample_new) = rx.recv() {
+                println!("got new sample");
                 let n_samples_new = sample_new.len();
                 let n_samples_take = std::cmp::min(
                     sample_old.len(),
-                    n_samples_keep + n_samples_step - n_samples_new,
+                    n_samples_keep
+                        .saturating_add(n_samples_step)
+                        .saturating_sub(n_samples_new),
                 );
 
                 let mut sample: Vec<f32> = vec![0.0; n_samples_new + n_samples_take];
@@ -97,7 +107,7 @@ impl Transcriber {
                 params.set_progress_callback_safe(|progress| {
                     println!("Progress callback: {}%", progress)
                 });
-                params.set_tdrz_enable(true);
+                // params.set_tdrz_enable(true);
                 // convert to float (f32
 
                 let st = std::time::Instant::now();
@@ -130,6 +140,8 @@ impl Transcriber {
                         .expect("failed to get end timestamp");
                     println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
                 }
+                println!("{}", full_text.join("\n"));
+                println!("{}", num_segments);
                 println!("Transcription took {}ms", (et - st).as_millis());
             }
         });

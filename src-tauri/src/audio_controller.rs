@@ -9,6 +9,8 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use crate::transcribe::{self, TranscriberController};
+
 struct Recorder {
     writer: Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>,
     stream: Option<Stream>,
@@ -24,7 +26,10 @@ impl Recorder {
         })
     }
 
-    fn start(&mut self) -> Result<()> {
+    fn start(
+        &mut self,
+        transcriber_controller: &Arc<transcribe::TranscriberController>,
+    ) -> Result<()> {
         let device = get_device_by_id("Platy Microphone").expect("No input device available");
         let config = device.default_input_config()?;
 
@@ -35,20 +40,24 @@ impl Recorder {
             sample_format: hound::SampleFormat::Int,
         };
         self.writer = Arc::new(Mutex::new(Some(WavWriter::create("output.wav", spec)?)));
+        let transcriber_clone = transcriber_controller.clone();
+        let buffer_size = spec.sample_rate * spec.channels as u32 * 2; // 2 seconds worth of samples
 
-        let writer_clone = self.writer.clone();
+        // Shared buffer and control flag between threads
+        let buffer = Arc::new(Mutex::new(Vec::<f32>::with_capacity(buffer_size as usize)));
+        let buffer_clone = Arc::clone(&buffer);
         let stream = device.build_input_stream(
             &config.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                if let Ok(mut writer_lock) = writer_clone.lock() {
-                    if let Some(ref mut writer) = *writer_lock {
-                        for &sample in data {
-                            let amplitude = (sample * i16::MAX as f32) as i16;
-                            writer
-                                .write_sample(amplitude)
-                                .expect("Failed to write sample");
-                        }
-                    }
+                let mut buffer = buffer_clone.lock().unwrap();
+
+                // Accumulate samples in the buffer
+                buffer.extend_from_slice(data);
+
+                // If the buffer has reached the target size, process it and clear the buffer
+                if buffer.len() >= buffer_size as usize {
+                    let chunk: Vec<f32> = buffer.drain(..).collect();
+                    transcriber_clone.add_chunk(chunk);
                 }
             },
             |err| eprintln!("Error: {:?}", err),
@@ -105,17 +114,21 @@ fn get_device_by_id(device_id_str: &str) -> Result<cpal::Device, Box<dyn std::er
 
 pub struct AudioController {
     sender: Sender<AudioCommand>,
+    transcriber_controller: Arc<TranscriberController>,
 }
 
 impl AudioController {
-    pub fn new() -> Self {
+    pub fn new(transcriber_controller: &Arc<TranscriberController>) -> Self {
         let (sender, receiver) = mpsc::channel();
+        let transcriber_clone = transcriber_controller.clone();
         thread::spawn(move || {
             let mut recorder = Recorder::new().expect("Failed to initialize the recorder");
             for command in receiver {
                 match command {
                     AudioCommand::Start => {
-                        recorder.start().expect("Failed to start recording");
+                        recorder
+                            .start(&transcriber_clone)
+                            .expect("Failed to start recording");
                     }
                     AudioCommand::Stop => {
                         recorder.stop().expect("Failed to stop recording");
@@ -123,7 +136,10 @@ impl AudioController {
                 }
             }
         });
-        AudioController { sender }
+        AudioController {
+            sender,
+            transcriber_controller: transcriber_controller.clone(),
+        }
     }
 
     pub fn start(&self) {

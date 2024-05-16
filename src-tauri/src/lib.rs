@@ -237,7 +237,10 @@ pub fn run() {
         },
     ];
 
-    let audio_controller = Arc::new(audio_controller::AudioController::new());
+    let transcriber_controller = Arc::new(transcribe::TranscriberController::new());
+    let audio_controller = Arc::new(audio_controller::AudioController::new(
+        &transcriber_controller,
+    ));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -248,6 +251,7 @@ pub fn run() {
                 .build(),
         )
         .manage(audio_controller)
+        .manage(transcriber_controller)
         .invoke_handler(tauri::generate_handler![
             transcribe,
             start_recording,
