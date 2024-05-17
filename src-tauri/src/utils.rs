@@ -1,9 +1,10 @@
+use std::collections::HashSet;
+use std::fs::File;
 use std::path::Path;
 
+use std::io::{self, BufRead, BufReader};
+
 use ffmpeg_sidecar::paths::sidecar_dir;
-use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 
 pub fn ffmpeg_path_as_str() -> Result<String, String> {
     let binary_name = if cfg!(target_os = "windows") {
@@ -21,4 +22,19 @@ pub fn ffmpeg_path_as_str() -> Result<String, String> {
     } else {
         Ok("ffmpeg".to_string())
     }
+}
+
+pub fn load_segment_list(segment_list_path: &Path) -> io::Result<HashSet<String>> {
+    let file = File::open(segment_list_path)?;
+    let reader = BufReader::new(file);
+
+    let mut segments = HashSet::new();
+    for line_result in reader.lines() {
+        let line = line_result?;
+        if !line.is_empty() {
+            segments.insert(line);
+        }
+    }
+
+    Ok(segments)
 }

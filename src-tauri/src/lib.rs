@@ -3,6 +3,7 @@
 
 mod media;
 mod recorder;
+mod transcribe;
 mod utils;
 
 use anyhow::Result;
@@ -37,9 +38,10 @@ use std::{
 use tauri::{Manager, State};
 use tauri_plugin_sql::PluginConfig;
 use tauri_plugin_sql::{Builder, Migration, MigrationKind};
+use transcribe::TranscriptionJSON;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use recorder::{start_recording, stop_recording, RecordingState, TranscriptionJSON};
+use recorder::{start_recording, stop_recording, RecordingState};
 
 fn parse_wav_file(path: &Path) -> Vec<i16> {
     let reader = WavReader::open(path).expect("failed to read file");
