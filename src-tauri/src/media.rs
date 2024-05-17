@@ -1,8 +1,7 @@
 use byteorder::{ByteOrder, LittleEndian};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::SampleFormat;
-use std::io::{Error, ErrorKind::WouldBlock};
-use std::path::Path;
+use std::io::Error;
 use std::process::Stdio;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -17,8 +16,6 @@ use tokio::sync::mpsc;
 
 use crate::recorder::RecordingOptions;
 use crate::utils::ffmpeg_path_as_str;
-
-const FRAME_RATE: u64 = 30;
 
 unsafe impl Send for MediaRecorder {}
 unsafe impl Sync for MediaRecorder {}
@@ -76,8 +73,6 @@ impl MediaRecorder {
         let audio_channel_sender = self.audio_channel_sender.clone();
 
         let audio_channel_receiver = Arc::new(Mutex::new(self.audio_channel_receiver.take()));
-
-        let should_stop = Arc::clone(&self.should_stop);
 
         let mut input_devices = devices.filter_map(|device| {
             let supported_input_configs = device.supported_input_configs();
@@ -289,7 +284,7 @@ impl MediaRecorder {
 
         audio_filters.push("loudnorm");
 
-        let mut ffmpeg_audio_command: Vec<String> = vec![
+        let ffmpeg_audio_command: Vec<String> = vec![
             "-f",
             sample_format,
             "-ar",
@@ -523,17 +518,4 @@ async fn start_recording_process(
     }
 
     Ok(process)
-}
-
-async fn wait_for_start_times(audio_start_time: Arc<Mutex<Option<Instant>>>) -> (Instant) {
-    loop {
-        let audio_start_locked = audio_start_time.lock().await;
-
-        if audio_start_locked.is_some() {
-            let audio_start = *audio_start_locked.as_ref().unwrap();
-            return audio_start;
-        }
-        drop(audio_start_locked);
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
 }

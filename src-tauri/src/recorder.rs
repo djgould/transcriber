@@ -1,10 +1,6 @@
-use ffmpeg_sidecar::error::Error;
-use futures::future::join_all;
-use hound::{SampleFormat, WavReader, WavSpec, WavWriter};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, ErrorKind, Write};
+use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -14,12 +10,10 @@ use std::time::Duration;
 use tauri::async_runtime::Mutex;
 use tauri::State;
 use tokio::process::Command;
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 use crate::media::MediaRecorder;
 use crate::transcribe::{start_transcription_loop, transcribe_wav_file};
 use crate::utils::ffmpeg_path_as_str;
-use tokio::io::AsyncWriteExt;
 
 pub struct RecordingState {
     pub media_process: Option<MediaRecorder>,
@@ -76,7 +70,6 @@ pub async fn start_recording(
 
     let audio_upload = start_transcription_loop(
         audio_chunks_dir,
-        options.clone(),
         shutdown_flag.clone(),
         state_guard.audio_uploading_finished.clone(),
     );
@@ -127,7 +120,7 @@ async fn combine_segments(
     let concat_file_path = audio_chunks_dir.join("concat.txt").clone();
     let combined_output_file_path = audio_chunks_dir.join("combined.wav");
 
-    write_concat_file(&concat_file_path, &segment_files);
+    write_concat_file(&concat_file_path, &segment_files).expect("error writing concat file");
 
     let args = vec![
         "-f",
@@ -164,7 +157,9 @@ async fn combine_segments(
 fn write_concat_file(concat_file_path: &PathBuf, segment_files: &Vec<String>) -> io::Result<()> {
     let mut output_file = File::create(concat_file_path)?;
     for segment_file in segment_files {
-        output_file.write_all(format!("file '{}'\n", segment_file).as_bytes());
+        output_file
+            .write_all(format!("file '{}'\n", segment_file).as_bytes())
+            .expect("error writing file");
     }
     Ok(())
 }

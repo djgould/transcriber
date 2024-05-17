@@ -7,21 +7,15 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread,
     time::Duration,
 };
 
-use anyhow::Error;
-use flume::{bounded, unbounded, Receiver, Sender};
 use futures::future::join_all;
 use hound::{SampleFormat, WavReader};
 use serde::{Deserialize, Serialize};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use crate::{
-    recorder::{RecordingOptions, RecordingState},
-    utils::load_segment_list,
-};
+use crate::{recorder::RecordingState, utils::load_segment_list};
 
 #[derive(Serialize, Deserialize)]
 pub struct TranscriptionJSON {
@@ -54,9 +48,6 @@ pub fn transcribe_wav_file(
     if spec.bits_per_sample != 16 {
         panic!("expected 16 bits per sample");
     }
-
-    // Original sample rate
-    let original_sample_rate = spec.sample_rate as f64;
 
     // Read all samples
     let original_samples: Vec<i16> = reader
@@ -96,7 +87,7 @@ pub fn transcribe_wav_file(
             .full_get_segment_text(i)
             .expect("failed to get segment");
         full_text[full_text_index].push_str(&segment);
-        if (state.full_get_segment_speaker_turn_next(i)) {
+        if state.full_get_segment_speaker_turn_next(i) {
             full_text.push(String::new());
             full_text_index += 1
         }
@@ -118,13 +109,13 @@ pub fn transcribe_wav_file(
         serde_json::to_string_pretty(&transcription).expect("failed to serialize transcription");
 
     let mut file = File::create(transcription_output_file_path).expect("couldn't create file");
-    file.write_all(json_string.as_bytes());
+    file.write_all(json_string.as_bytes())
+        .expect("could not write to file");
     Ok(())
 }
 
 pub async fn start_transcription_loop(
     chunks_dir: PathBuf,
-    options: RecordingOptions,
     shutdown_flag: Arc<AtomicBool>,
     transcription_finished: Arc<AtomicBool>,
 ) -> Result<(), String> {
@@ -150,7 +141,6 @@ pub async fn start_transcription_loop(
             let segment_path = chunks_dir.join(segment_filename);
             let transcription_path = chunks_dir.join(format!("{}.json", segment_filename));
             if segment_path.is_file() {
-                let options_clone = options.clone();
                 let segment_path_clone = segment_path.clone();
                 transcription_tasks.push(tokio::spawn(async move {
                     transcribe_wav_file(&segment_path_clone, &transcription_path)?;
@@ -175,9 +165,7 @@ pub async fn start_transcription_loop(
 pub async fn get_real_time_transcription(
     state: tauri::State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
 ) -> Result<TranscriptionJSON, String> {
-    let mut state_guard = state.lock().await;
-
-    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let state_guard = state.lock().await;
 
     let data_dir = match &state_guard.data_dir {
         Some(dir) => dir,
@@ -226,9 +214,7 @@ pub async fn get_real_time_transcription(
 pub async fn get_complete_transcription(
     state: tauri::State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
 ) -> Result<TranscriptionJSON, String> {
-    let mut state_guard = state.lock().await;
-
-    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let state_guard = state.lock().await;
 
     let data_dir = match &state_guard.data_dir {
         Some(dir) => dir,
