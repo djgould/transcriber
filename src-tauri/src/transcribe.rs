@@ -1,6 +1,6 @@
 use std::{
     collections::HashSet,
-    fs::File,
+    fs::{read_dir, read_to_string, File},
     io::Write,
     path::PathBuf,
     sync::{
@@ -18,7 +18,10 @@ use hound::{SampleFormat, WavReader};
 use serde::{Deserialize, Serialize};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use crate::{recorder::RecordingOptions, utils::load_segment_list};
+use crate::{
+    recorder::{RecordingOptions, RecordingState},
+    utils::load_segment_list,
+};
 
 #[derive(Serialize, Deserialize)]
 pub struct TranscriptionJSON {
@@ -166,4 +169,108 @@ pub async fn start_transcription_loop(
     }
     transcription_finished.store(true, Ordering::SeqCst);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_real_time_transcription(
+    state: tauri::State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+) -> Result<TranscriptionJSON, String> {
+    let mut state_guard = state.lock().await;
+
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+
+    let data_dir = match &state_guard.data_dir {
+        Some(dir) => dir,
+        None => return Err("Data directory not set".to_string()),
+    };
+
+    let audio_dir = data_dir.join("chunks/audio");
+
+    let mut paths: Vec<PathBuf> = match read_dir(audio_dir) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| path.file_name() != Some(std::ffi::OsStr::new("transcription.json")))
+            .collect(),
+        Err(err) => return Err(format!("Failed to read directory: {}", err)),
+    };
+
+    paths.sort_by(|a, b| {
+        let a_name = a.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let b_name = b.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        a_name.cmp(b_name)
+    });
+
+    let mut merged_content = TranscriptionJSON {
+        full_text: Vec::new(),
+    };
+
+    for path in paths {
+        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            let content = read_to_string(&path)
+                .map_err(|err| format!("Failed to read file {}: {}", path.display(), err))?;
+
+            let json_content: TranscriptionJSON =
+                serde_json::from_str(&content).map_err(|err| {
+                    format!("Failed to parse JSON in file {}: {}", path.display(), err)
+                })?;
+
+            merged_content.full_text.extend(json_content.full_text);
+        }
+    }
+
+    Ok(merged_content)
+}
+
+#[tauri::command]
+pub async fn get_complete_transcription(
+    state: tauri::State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+) -> Result<TranscriptionJSON, String> {
+    let mut state_guard = state.lock().await;
+
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+
+    let data_dir = match &state_guard.data_dir {
+        Some(dir) => dir,
+        None => return Err("Data directory not set".to_string()),
+    };
+
+    let audio_dir = data_dir.join("chunks/audio");
+
+    let mut paths: Vec<PathBuf> = match read_dir(audio_dir) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| path.file_name() == Some(std::ffi::OsStr::new("transcription.json")))
+            .collect(),
+        Err(err) => return Err(format!("Failed to read directory: {}", err)),
+    };
+
+    println!("Found {} transcription files", paths.len());
+
+    paths.sort_by(|a, b| {
+        let a_name = a.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let b_name = b.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        a_name.cmp(b_name)
+    });
+
+    let mut merged_content = TranscriptionJSON {
+        full_text: Vec::new(),
+    };
+
+    for path in paths {
+        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            let content = read_to_string(&path)
+                .map_err(|err| format!("Failed to read file {}: {}", path.display(), err))?;
+
+            let json_content: TranscriptionJSON =
+                serde_json::from_str(&content).map_err(|err| {
+                    format!("Failed to parse JSON in file {}: {}", path.display(), err)
+                })?;
+
+            merged_content.full_text.extend(json_content.full_text);
+        }
+    }
+
+    Ok(merged_content)
 }
