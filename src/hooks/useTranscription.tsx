@@ -11,3 +11,14 @@ export function useLiveTranscription(isRecording: boolean) {
     enabled: isRecording,
   });
 }
+
+export function useCompleteTranscription(isRecording: boolean) {
+  return useQuery({
+    queryKey: ["get_complete_transcription"],
+    queryFn: async (): Promise<{ full_text: string[] }> => {
+      return invoke("get_complete_transcription");
+    },
+    refetchInterval: 1000,
+    enabled: !isRecording,
+  });
+}

@@ -239,6 +239,7 @@ async fn get_real_time_transcription(
         Ok(entries) => entries
             .filter_map(|entry| entry.ok())
             .map(|entry| entry.path())
+            .filter(|path| path.file_name() != Some(std::ffi::OsStr::new("transcription.json")))
             .collect(),
         Err(err) => return Err(format!("Failed to read directory: {}", err)),
     };
@@ -254,8 +255,6 @@ async fn get_real_time_transcription(
     };
 
     for path in paths {
-        println!("Reading file {}", path.display());
-
         if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
             let content = fs::read_to_string(&path)
                 .map_err(|err| format!("Failed to read file {}: {}", path.display(), err))?;
@@ -265,7 +264,58 @@ async fn get_real_time_transcription(
                     format!("Failed to parse JSON in file {}: {}", path.display(), err)
                 })?;
 
-            println!("{}", content);
+            merged_content.full_text.extend(json_content.full_text);
+        }
+    }
+
+    Ok(merged_content)
+}
+
+#[tauri::command]
+async fn get_complete_transcription(
+    state: tauri::State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+) -> Result<TranscriptionJSON, String> {
+    let mut state_guard = state.lock().await;
+
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+
+    let data_dir = match &state_guard.data_dir {
+        Some(dir) => dir,
+        None => return Err("Data directory not set".to_string()),
+    };
+
+    let audio_dir = data_dir.join("chunks/audio");
+
+    let mut paths: Vec<PathBuf> = match fs::read_dir(audio_dir) {
+        Ok(entries) => entries
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| path.file_name() == Some(std::ffi::OsStr::new("transcription.json")))
+            .collect(),
+        Err(err) => return Err(format!("Failed to read directory: {}", err)),
+    };
+
+    println!("Found {} transcription files", paths.len());
+
+    paths.sort_by(|a, b| {
+        let a_name = a.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let b_name = b.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        a_name.cmp(b_name)
+    });
+
+    let mut merged_content = TranscriptionJSON {
+        full_text: Vec::new(),
+    };
+
+    for path in paths {
+        if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
+            let content = fs::read_to_string(&path)
+                .map_err(|err| format!("Failed to read file {}: {}", path.display(), err))?;
+
+            let json_content: TranscriptionJSON =
+                serde_json::from_str(&content).map_err(|err| {
+                    format!("Failed to parse JSON in file {}: {}", path.display(), err)
+                })?;
 
             merged_content.full_text.extend(json_content.full_text);
         }
@@ -364,6 +414,7 @@ pub fn run() {
             start_recording,
             stop_recording,
             get_real_time_transcription,
+            get_complete_transcription,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

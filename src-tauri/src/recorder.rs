@@ -157,6 +157,7 @@ async fn combine_segments(
         });
     }
 
+    process.wait().await?;
     Ok(process)
 }
 
@@ -184,12 +185,6 @@ pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Res
             .expect("Failed to stop media recording");
     }
 
-    let data_dir = guard.data_dir.clone();
-
-    combine_segments(data_dir.expect("no data directory").join("chunks/audio"))
-        .await
-        .map_err(|e| e.to_string())?;
-
     // let is_local_mode = match dotenv_codegen::dotenv!("NEXT_PUBLIC_LOCAL_MODE") {
     //     "true" => true,
     //     _ => false,
@@ -201,6 +196,34 @@ pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Res
     //         tokio::time::sleep(Duration::from_millis(50)).await;
     //     }
     // }
+
+    while !guard.audio_uploading_finished.load(Ordering::SeqCst) {
+        println!("Waiting for uploads to finish...");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let data_dir = guard.data_dir.clone();
+
+    combine_segments(data_dir.expect("no data directory").join("chunks/audio"))
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    println!("combined segments..");
+
+    let combined_audio_file = guard
+        .data_dir
+        .clone()
+        .expect("no data directory")
+        .join("chunks/audio/combined.wav");
+    let transcription_output_file = guard
+        .data_dir
+        .clone()
+        .expect("no data directory")
+        .join("chunks/audio/transcription.json");
+    transcribe_wav_file(&combined_audio_file, &transcription_output_file)
+        .map_err(|e| e.to_string())?;
 
     println!("All recordings and uploads stopped.");
 
@@ -265,96 +288,8 @@ async fn start_transcription_loop(
                 let options_clone = options.clone();
                 let segment_path_clone = segment_path.clone();
                 transcription_tasks.push(tokio::spawn(async move {
-                    let filepath_str = segment_path_clone.to_str().unwrap_or_default().to_owned();
-                    use std::path::Path;
+                    transcribe_wav_file(&segment_path_clone, &transcription_path)?;
 
-                    let whisper_path = Path::new(
-                        "/Users/devingould/platy/src-tauri/src/models/ggml-small.en-tdrz.bin",
-                    );
-                    if !whisper_path.exists() {
-                        panic!("whisper file doesn't exist");
-                    }
-
-                    let mut reader =
-                        WavReader::open(segment_path_clone).expect("failed to read file");
-                    let spec = reader.spec();
-
-                    if spec.channels != 1 {
-                        panic!("expected mono audio file");
-                    }
-                    if spec.sample_format != SampleFormat::Int {
-                        panic!("expected integer sample format");
-                    }
-                    if spec.bits_per_sample != 16 {
-                        panic!("expected 16 bits per sample");
-                    }
-
-                    // Original sample rate
-                    let original_sample_rate = spec.sample_rate as f64;
-
-                    // Read all samples
-                    let original_samples: Vec<i16> = reader
-                        .samples::<i16>()
-                        .map(|s| s.expect("failed to read sample"))
-                        .collect();
-                    let mut samples = vec![0.0f32; original_samples.len()];
-
-                    whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
-                        .expect("failed to convert samples");
-
-                    let ctx = WhisperContext::new_with_params(
-                        &whisper_path.to_string_lossy(),
-                        WhisperContextParameters::default(),
-                    )
-                    .expect("failed to open model");
-                    let mut state = ctx.create_state().expect("failed to create state");
-                    let mut params = FullParams::new(SamplingStrategy::default());
-                    params.set_initial_prompt("experience");
-                    params.set_progress_callback_safe(|progress| {
-                        println!("Progress callback: {}%", progress)
-                    });
-                    params.set_tdrz_enable(true);
-
-                    let st = std::time::Instant::now();
-                    state
-                        .full(params, &samples)
-                        .expect("failed to transcribe audio");
-
-                    let et = std::time::Instant::now();
-
-                    let num_segments = state
-                        .full_n_segments()
-                        .expect("failed to get number of segments");
-                    let mut full_text: Vec<String> = vec![String::new()];
-                    let mut full_text_index = 0;
-                    for i in 0..num_segments {
-                        let segment = state
-                            .full_get_segment_text(i)
-                            .expect("failed to get segment");
-                        full_text[full_text_index].push_str(&segment);
-                        if (state.full_get_segment_speaker_turn_next(i)) {
-                            full_text.push(String::new());
-                            full_text_index += 1
-                        }
-                        let start_timestamp = state
-                            .full_get_segment_t0(i)
-                            .expect("failed to get start timestamp");
-                        let end_timestamp = state
-                            .full_get_segment_t1(i)
-                            .expect("failed to get end timestamp");
-                        println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
-                    }
-                    println!("Transcription took {}ms", (et - st).as_millis());
-
-                    let transcription = TranscriptionJSON {
-                        full_text: full_text,
-                    };
-
-                    let json_string = serde_json::to_string_pretty(&transcription)
-                        .expect("failed to serialize transcription");
-
-                    let mut file = File::create(transcription_path).expect("couldn't create file");
-                    file.write_all(json_string.as_bytes());
                     Ok(())
                 }));
             }
@@ -368,6 +303,100 @@ async fn start_transcription_loop(
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     transcription_finished.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+fn transcribe_wav_file(
+    wav_filepath: &PathBuf,
+    transcription_output_file_path: &PathBuf,
+) -> Result<(), String> {
+    let filepath_str = wav_filepath.to_str().unwrap_or_default().to_owned();
+    println!("{}", filepath_str);
+    use std::path::Path;
+
+    let whisper_path =
+        Path::new("/Users/devingould/platy/src-tauri/src/models/ggml-small.en-tdrz.bin");
+    if !whisper_path.exists() {
+        panic!("whisper file doesn't exist");
+    }
+
+    let mut reader = WavReader::open(filepath_str).expect("failed to read file");
+    let spec = reader.spec();
+
+    if spec.channels != 1 {
+        panic!("expected mono audio file");
+    }
+    if spec.sample_format != SampleFormat::Int {
+        panic!("expected integer sample format");
+    }
+    if spec.bits_per_sample != 16 {
+        panic!("expected 16 bits per sample");
+    }
+
+    // Original sample rate
+    let original_sample_rate = spec.sample_rate as f64;
+
+    // Read all samples
+    let original_samples: Vec<i16> = reader
+        .samples::<i16>()
+        .map(|s| s.expect("failed to read sample"))
+        .collect();
+    let mut samples = vec![0.0f32; original_samples.len()];
+
+    whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
+        .expect("failed to convert samples");
+
+    let ctx = WhisperContext::new_with_params(
+        &whisper_path.to_string_lossy(),
+        WhisperContextParameters::default(),
+    )
+    .expect("failed to open model");
+    let mut state = ctx.create_state().expect("failed to create state");
+    let mut params = FullParams::new(SamplingStrategy::default());
+    params.set_initial_prompt("experience");
+    params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
+    params.set_tdrz_enable(true);
+
+    let st = std::time::Instant::now();
+    state
+        .full(params, &samples)
+        .expect("failed to transcribe audio");
+
+    let et = std::time::Instant::now();
+
+    let num_segments = state
+        .full_n_segments()
+        .expect("failed to get number of segments");
+    let mut full_text: Vec<String> = vec![String::new()];
+    let mut full_text_index = 0;
+    for i in 0..num_segments {
+        let segment = state
+            .full_get_segment_text(i)
+            .expect("failed to get segment");
+        full_text[full_text_index].push_str(&segment);
+        if (state.full_get_segment_speaker_turn_next(i)) {
+            full_text.push(String::new());
+            full_text_index += 1
+        }
+        let start_timestamp = state
+            .full_get_segment_t0(i)
+            .expect("failed to get start timestamp");
+        let end_timestamp = state
+            .full_get_segment_t1(i)
+            .expect("failed to get end timestamp");
+        println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
+    }
+    println!("Transcription took {}ms", (et - st).as_millis());
+
+    let transcription = TranscriptionJSON {
+        full_text: full_text,
+    };
+
+    let json_string =
+        serde_json::to_string_pretty(&transcription).expect("failed to serialize transcription");
+
+    let mut file = File::create(transcription_output_file_path).expect("couldn't create file");
+    file.write_all(json_string.as_bytes());
     Ok(())
 }
 
