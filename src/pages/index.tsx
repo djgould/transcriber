@@ -1,121 +1,179 @@
 "use client";
-import { Link } from "@/components/catalyst-ui/link";
+import { useAudioDevicesQuery } from "@/hooks/useMediaDevices";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAtom } from "jotai";
+import { selectedAudioDeviceAtom } from "@/atoms/audioDeviceAtom";
+import { useEffect, useState } from "react";
+import {
+  useStartRecorderMutation,
+  useStopRecorderMutation,
+} from "@/hooks/useRecorder";
+import { Circle, Eye, Loader, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import clsx from "clsx";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Circle, Speaker } from "lucide-react";
-import { useRouter } from "next/router";
-import { Slider } from "@/components/ui/slider";
-import AudioRecorder from "@/components/audio-recorder/AudioRecorder";
 import { Separator } from "@/components/ui/separator";
 import {
-  useCompleteTranscription,
-  useLiveTranscription,
-} from "@/hooks/useTranscription";
-import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import clsx from "clsx";
-
-const transcript = [
-  {
-    speaker: "Speaker 1",
-    text: "Houston, we've had a problem here.",
-    timeStamp: 0,
-  },
-  {
-    speaker: "Speaker 2",
-    text: "This is Houston. Say again please.",
-    timeStamp: 0,
-  },
-  {
-    speaker: "Speaker 1",
-    text: "Uh Houston we've had a problem. We've had a main beam plus one volt.",
-    timeStamp: 0,
-  },
-  {
-    speaker: "Speaker 2",
-    text: "Roger main beam interval.",
-    timeStamp: 0,
-  },
-  {
-    speaker: "Speaker 1",
-    text: "Uh uh uh",
-    timeStamp: 0,
-  },
-  {
-    speaker: "Speaker 2",
-    text: "Speaker 2 So okay stand, by thirteen we're looking at it.",
-    timeStamp: 0,
-  },
-  {
-    speaker: "Speaker 1",
-    text: " Okay uh right now uh Houston the uh voltage is uh is looking good um And we had a apretty large bank or so.",
-    timeStamp: 0,
-  },
-];
+  useConversations,
+  useCreateConversationMutation,
+  useDeleteConversationMutation,
+} from "@/hooks/useConversations";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import Link from "next/link";
 
 export default function Page() {
-  const [isRecording, setIsRecording] = useState(false);
+  const audioDevices = useAudioDevicesQuery();
+  const [selectedAudioDevice, setSelectedAudioDevice] = useAtom(
+    selectedAudioDeviceAtom
+  );
+  const [activeRecordingInfo, setActiveRecordingInfo] = useState<
+    { conversation_id: number; status: "recording" | "stopping" } | undefined
+  >();
 
-  const liveTranscription = useLiveTranscription(isRecording);
-  const completeTranscription = useCompleteTranscription(isRecording);
+  const startRecorderMutation = useStartRecorderMutation();
+  const stopRecorderMutation = useStopRecorderMutation();
+
+  const conversations = useConversations();
+  const createConversationMutation = useCreateConversationMutation();
+  const deleteConversationMutation = useDeleteConversationMutation();
+
   const startRecording = async () => {
-    setIsRecording(true);
-    await invoke("start_recording", {
-      options: { user_id: "1", audio_name: "name" },
-    }).catch(() => setIsRecording(false));
+    createConversationMutation.mutate(undefined, {
+      onSuccess(conversation) {
+        setActiveRecordingInfo({
+          conversation_id: conversation.lastInsertId,
+          status: "recording",
+        });
+        startRecorderMutation.mutate(
+          {
+            conversation_id: conversation.lastInsertId,
+          },
+          {
+            onError: () => {
+              setActiveRecordingInfo(undefined);
+            },
+          }
+        );
+      },
+    });
   };
 
   const stopRecording = () => {
-    setIsRecording(false);
-    invoke("stop_recording");
+    if (!activeRecordingInfo?.conversation_id) return;
+    setActiveRecordingInfo({
+      ...activeRecordingInfo,
+      status: "stopping",
+    });
+    stopRecorderMutation.mutate(
+      { conversation_id: activeRecordingInfo?.conversation_id },
+      {
+        onSuccess: () => {
+          setActiveRecordingInfo(undefined);
+        },
+      }
+    );
   };
 
-  const transcription = isRecording ? liveTranscription : completeTranscription;
-
   return (
-    <div className="p-2 h-screen">
+    <div className="p-2 h-screen flex flex-col gap-4">
+      <Select
+        value={selectedAudioDevice}
+        onValueChange={(value) => setSelectedAudioDevice(value)}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder={selectedAudioDevice} />
+        </SelectTrigger>
+        <SelectContent>
+          {audioDevices.data?.map((device) => (
+            <SelectItem value={device}>{device}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="outline"
+        disabled={activeRecordingInfo?.status === "stopping"}
+        onClick={() => {
+          if (activeRecordingInfo) {
+            stopRecording();
+          } else {
+            startRecording();
+          }
+        }}
+      >
+        {activeRecordingInfo?.status === "stopping" && (
+          <Loader className="animate-spin" />
+        )}
+        {activeRecordingInfo?.status === "recording" && (
+          <Circle className={clsx("text-red-800 fill-red-800 animate-pulse")} />
+        )}
+        {!activeRecordingInfo && <Circle className={clsx("text-red-800")} />}
+      </Button>
       <Card>
         <CardHeader>
-          <CardTitle>Your Converstation</CardTitle>
+          <CardTitle className="text-lg text-center">
+            Your Converstations
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-y-scroll">
-          <Separator />
-          {transcription.data?.full_text?.map((slice, i) => (
-            <div className="mt-2 flex flex-col" key={slice}>
-              <p>{slice}</p>
-            </div>
-          ))}
-        </CardContent>
-        <CardFooter className="flex flex-col gap-4">
-          <Separator />
+          <Table>
+            <TableCaption>A list of your recent conversations.</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[100px]">Created at</TableHead>
+                <TableHead className="w-[100px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {conversations.data?.map((conversation) => (
+                <TableRow key={conversation.id}>
+                  <TableCell className="font-medium">
+                    {new Date(conversation.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="font-medium flex justify-between">
+                    <Link href={`/conversations/${conversation.id}`}>
+                      <Button size={"sm"} variant={"secondary"}>
+                        <Eye />
+                      </Button>
+                    </Link>
 
-          <div>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (isRecording) {
-                  stopRecording();
-                } else {
-                  startRecording();
-                }
-              }}
-            >
-              <Circle
-                className={clsx(
-                  "text-red-800",
-                  isRecording && " fill-red-800 animate-pulse"
-                )}
-              />
-            </Button>
-          </div>
-        </CardFooter>
+                    <Button
+                      size={"sm"}
+                      variant={"secondary"}
+                      onClick={() => {
+                        deleteConversationMutation.mutate({
+                          conversationId: conversation.id,
+                        });
+                      }}
+                    >
+                      <Trash />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+        <CardFooter className="flex flex-col gap-4"></CardFooter>
       </Card>
     </div>
   );

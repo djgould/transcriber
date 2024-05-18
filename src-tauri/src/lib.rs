@@ -21,7 +21,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 use transcribe::{get_complete_transcription, get_real_time_transcription};
 
 use media::enumerate_audio_devices;
-use recorder::{start_recording, stop_recording, RecordingState};
+use recorder::{delete_recording_data, start_recording, stop_recording, RecordingState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,6 +40,16 @@ pub fn run() {
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 transcription TEXT NOT NULL, -- Store JSON data as text
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "create_conversations_table",
+            sql: "CREATE TABLE conversations (
+                id INTEGER PRIMARY KEY,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );",
@@ -107,6 +117,7 @@ pub fn run() {
             stop_recording,
             get_real_time_transcription,
             get_complete_transcription,
+            delete_recording_data,
             enumerate_audio_devices,
         ])
         .run(tauri::generate_context!())

@@ -213,6 +213,7 @@ pub async fn get_real_time_transcription(
 #[tauri::command]
 pub async fn get_complete_transcription(
     state: tauri::State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+    conversation_id: u64,
 ) -> Result<TranscriptionJSON, String> {
     let state_guard = state.lock().await;
 
@@ -221,7 +222,9 @@ pub async fn get_complete_transcription(
         None => return Err("Data directory not set".to_string()),
     };
 
-    let audio_dir = data_dir.join("chunks/audio");
+    let audio_dir = data_dir
+        .join("chunks/audio")
+        .join(conversation_id.to_string());
 
     let mut paths: Vec<PathBuf> = match read_dir(audio_dir) {
         Ok(entries) => entries

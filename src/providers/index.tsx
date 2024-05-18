@@ -6,6 +6,10 @@ import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "./ThemeProvider";
+import { AudioDeviceContextProvider } from "@/context/AudioDeviceContext";
+import { ConfigurationProvider } from "./ConfigurationProvider";
+import { Provider as JotaiProvider } from "jotai";
+import { ClientOnly } from "./ClientOnlyProvider";
 
 function makeQueryClient() {
   return new QueryClient({
@@ -43,15 +47,21 @@ export default function Providers({ children }) {
   const queryClient = getQueryClient();
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <TooltipProvider>{children}</TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <JotaiProvider>
+      <QueryClientProvider client={queryClient}>
+        <ClientOnly>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <ConfigurationProvider>
+              <TooltipProvider>{children}</TooltipProvider>
+            </ConfigurationProvider>
+          </ThemeProvider>
+        </ClientOnly>
+      </QueryClientProvider>
+    </JotaiProvider>
   );
 }

@@ -297,6 +297,8 @@ impl MediaRecorder {
             "pipe:0",
             "-af",
             "aresample=async=1:min_hard_comp=0.100000:first_pts=0:osr=16000",
+            "-ac",
+            "1",
             "-c:a",
             "pcm_s16le",
             "-async",

@@ -18,9 +18,13 @@ import {
   useCompleteTranscription,
   useLiveTranscription,
 } from "@/hooks/useTranscription";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import clsx from "clsx";
+import {
+  useStartRecorderMutation,
+  useStopRecorderMutation,
+} from "@/hooks/useRecorder";
 
 const transcript = [
   {
@@ -65,16 +69,25 @@ export default function Page() {
 
   const liveTranscription = useLiveTranscription(isRecording);
   const completeTranscription = useCompleteTranscription(isRecording);
+  const startRecorderMutation = useStartRecorderMutation();
+  const stopRecorderMutation = useStopRecorderMutation();
+
+  useEffect(() => {
+    invoke("enumerate_audio_devices").then(console.log);
+  }, []);
+
   const startRecording = async () => {
     setIsRecording(true);
-    await invoke("start_recording", {
-      options: { user_id: "1", audio_name: "name" },
-    }).catch(() => setIsRecording(false));
+
+    startRecorderMutation.mutate();
   };
 
   const stopRecording = () => {
-    setIsRecording(false);
-    invoke("stop_recording");
+    stopRecorderMutation.mutate(null, {
+      onSuccess: () => {
+        setIsRecording(false);
+      },
+    });
   };
 
   const transcription = isRecording ? liveTranscription : completeTranscription;
@@ -87,11 +100,17 @@ export default function Page() {
         </CardHeader>
         <CardContent className="flex-1 overflow-y-scroll">
           <Separator />
-          {transcription.data?.full_text?.map((slice, i) => (
-            <div className="mt-2 flex flex-col" key={slice}>
-              <p>{slice}</p>
+          {stopRecorderMutation.isPending && (
+            <div className="flex flex-col items-center justify-center">
+              <p>Processing transcription</p>
             </div>
-          ))}
+          )}
+          {!stopRecorderMutation.isPending &&
+            transcription.data?.full_text?.map((slice, i) => (
+              <div className="mt-2 flex flex-col" key={`${slice}-${i}`}>
+                <p>{slice}</p>
+              </div>
+            ))}
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <Separator />

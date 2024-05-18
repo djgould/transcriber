@@ -57,5 +57,5 @@ function generateBreadcrumbs(pathname: string) {
 export default function BreadcrumbNav() {
   const router = useRouter();
   const breadcrumbs = generateBreadcrumbs(router.pathname);
-  return <Breadcrumb className="hidden md:flex">{breadcrumbs}</Breadcrumb>;
+  return <Breadcrumb className="flex">{breadcrumbs}</Breadcrumb>;
 }

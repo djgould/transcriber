@@ -33,6 +33,7 @@ pub struct RecordingOptions {
 pub async fn start_recording(
     state: State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
     options: RecordingOptions,
+    conversation_id: u64,
 ) -> Result<(), String> {
     println!("Starting screen recording...");
     let mut state_guard = state.lock().await;
@@ -47,7 +48,9 @@ pub async fn start_recording(
 
     println!("data_dir: {:?}", data_dir);
 
-    let audio_chunks_dir = data_dir.join("chunks/audio");
+    let audio_chunks_dir = data_dir
+        .join("chunks/audio")
+        .join(conversation_id.to_string());
 
     clean_and_create_dir(&audio_chunks_dir)?;
 
@@ -91,7 +94,7 @@ pub async fn start_recording(
 use tokio::io::AsyncBufReadExt;
 
 async fn combine_segments(
-    audio_chunks_dir: PathBuf,
+    audio_chunks_dir: &PathBuf,
 ) -> Result<tokio::process::Child, std::io::Error> {
     let ffmpeg_binary_path_str = ffmpeg_path_as_str().unwrap().to_owned();
 
@@ -165,7 +168,10 @@ fn write_concat_file(concat_file_path: &PathBuf, segment_files: &Vec<String>) ->
 }
 
 #[tauri::command]
-pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Result<(), String> {
+pub async fn stop_recording(
+    state: State<'_, Arc<Mutex<RecordingState>>>,
+    conversation_id: u64,
+) -> Result<(), String> {
     let mut guard = state.lock().await;
 
     println!("Stopping media recording...");
@@ -198,8 +204,11 @@ pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Res
     }
 
     let data_dir = guard.data_dir.clone();
-
-    combine_segments(data_dir.expect("no data directory").join("chunks/audio"))
+    let recording_dir = data_dir
+        .expect("no data directory")
+        .join("chunks/audio")
+        .join(conversation_id.to_string());
+    combine_segments(&recording_dir)
         .await
         .map_err(|e| e.to_string())?;
 
@@ -207,21 +216,30 @@ pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Res
 
     println!("combined segments..");
 
-    let combined_audio_file = guard
-        .data_dir
-        .clone()
-        .expect("no data directory")
-        .join("chunks/audio/combined.wav");
-    let transcription_output_file = guard
-        .data_dir
-        .clone()
-        .expect("no data directory")
-        .join("chunks/audio/transcription.json");
+    let combined_audio_file = recording_dir.join("combined.wav");
+    let transcription_output_file = recording_dir.join("transcription.json");
     transcribe_wav_file(&combined_audio_file, &transcription_output_file)
         .map_err(|e| e.to_string())?;
 
     println!("All recordings and uploads stopped.");
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_recording_data(
+    state: State<'_, Arc<Mutex<RecordingState>>>,
+    conversation_id: u64,
+) -> Result<(), String> {
+    let guard = state.lock().await;
+
+    let data_dir = guard.data_dir.clone();
+
+    let recording_dir = data_dir
+        .expect("no data directory")
+        .join("chunks/audio")
+        .join(conversation_id.to_string());
+    std::fs::remove_dir_all(&recording_dir).map_err(|e| e.to_string())?;
     Ok(())
 }
 

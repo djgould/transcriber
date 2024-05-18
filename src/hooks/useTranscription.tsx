@@ -12,13 +12,13 @@ export function useLiveTranscription(isRecording: boolean) {
   });
 }
 
-export function useCompleteTranscription(isRecording: boolean) {
+export function useCompleteTranscription(conversationId: number) {
   return useQuery({
-    queryKey: ["get_complete_transcription"],
+    queryKey: ["get_complete_transcription", conversationId],
     queryFn: async (): Promise<{ full_text: string[] }> => {
-      return invoke("get_complete_transcription");
+      return invoke("get_complete_transcription", { conversationId });
     },
     refetchInterval: 1000,
-    enabled: !isRecording,
+    enabled: !!conversationId,
   });
 }

@@ -56,7 +56,8 @@
         "height": 600,
         "resizable": true,
         "title": "platy",
-        "width": 800
+        "width": 300,
+        "decorations": false
       }
     ],
     "security": {
