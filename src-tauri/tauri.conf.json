@@ -6,7 +6,6 @@
     "devUrl": "http://localhost:3000",
     "frontendDist": "../out"
   },
-  
   "bundle": {
     "active": true,
     "category": "DeveloperTool",
@@ -52,6 +51,7 @@
   "app": {
     "windows": [
       {
+        "label": "tray-window",
         "fullscreen": false,
         "height": 600,
         "resizable": true,
