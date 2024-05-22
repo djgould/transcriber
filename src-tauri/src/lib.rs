@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod coreaudio_device;
 mod media;
 mod recorder;
 mod transcribe;
@@ -20,8 +21,12 @@ use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 use transcribe::{get_complete_transcription, get_real_time_transcription};
 
-use media::enumerate_audio_devices;
+use media::{
+    enumerate_audio_input_devices, enumerate_audio_output_devices, set_target_output_device,
+};
 use recorder::{delete_recording_data, start_recording, stop_recording, RecordingState};
+
+use crate::media::set_configurator_id;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -56,6 +61,8 @@ pub fn run() {
             kind: MigrationKind::Up,
         },
     ];
+
+    set_configurator_id();
 
     fn handle_ffmpeg_installation() -> FfmpegResult<()> {
         if ffmpeg_is_installed() {
@@ -118,7 +125,9 @@ pub fn run() {
             get_real_time_transcription,
             get_complete_transcription,
             delete_recording_data,
-            enumerate_audio_devices,
+            enumerate_audio_input_devices,
+            enumerate_audio_output_devices,
+            set_target_output_device
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

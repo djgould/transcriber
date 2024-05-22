@@ -704,6 +704,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "coreaudio-rs"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fb5be6fe37ca53193950415bb49e502c361329ac34f4986d640cf7c3e1e0adb"
+dependencies = [
+ "bitflags 1.3.2",
+ "core-foundation-sys",
+ "coreaudio-sys",
+]
+
+[[package]]
 name = "coreaudio-sys"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -720,7 +731,7 @@ checksum = "873dab07c8f743075e57f524c583985fbaf745602acbe916a01539364369a779"
 dependencies = [
  "alsa",
  "core-foundation-sys",
- "coreaudio-rs",
+ "coreaudio-rs 0.11.3",
  "dasp_sample",
  "jni",
  "js-sys",
@@ -2141,9 +2152,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.154"
+version = "0.2.155"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae743338b92ff9146ce83992f766a31066a91a8c84a45e0e9f21e7cf6de6d346"
+checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "libloading"
@@ -2972,12 +2983,18 @@ name = "platy"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bindgen",
  "byteorder",
+ "core-foundation",
+ "core-foundation-sys",
+ "coreaudio-rs 0.12.0",
+ "coreaudio-sys",
  "cpal",
  "ffmpeg-sidecar",
  "flume",
  "futures",
  "hound",
+ "libc",
  "rubato",
  "serde",
  "serde_json",

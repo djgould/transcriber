@@ -1,16 +1,33 @@
-import { useAudioDevicesQuery } from "@/hooks/useMediaDevices";
+import {
+  useAudioInputDevicesQuery,
+  useAudioOutputDevicesQuery,
+} from "@/hooks/useMediaDevices";
 import { useEffect } from "react";
 import { useAtom } from "jotai";
-import { selectedAudioDeviceAtom } from "@/atoms/audioDeviceAtom";
+import {
+  selectedAudioInputDeviceAtom,
+  selectedAudioOutputDeviceAtom,
+} from "@/atoms/audioDeviceAtom";
 
 export function ConfigurationProvider({ children }: React.PropsWithChildren) {
-  const audioDevices = useAudioDevicesQuery();
-  const [selectedAudioDevice, setSelectedAudioDevice] = useAtom(
-    selectedAudioDeviceAtom
+  const audioInputDevices = useAudioInputDevicesQuery();
+  const audioOutputDevices = useAudioOutputDevicesQuery();
+
+  const [selectedAudioInputDevice, setSelectedAudioInputDevice] = useAtom(
+    selectedAudioInputDeviceAtom
   );
+  const [selectedAudioOutputDevice, setSelectedAudioOutputDevice] = useAtom(
+    selectedAudioOutputDeviceAtom
+  );
+
   useEffect(() => {
-    if (!selectedAudioDevice && audioDevices.data)
-      setSelectedAudioDevice(audioDevices.data[0]);
-  }, audioDevices.data);
+    if (!selectedAudioInputDevice && audioInputDevices.data)
+      setSelectedAudioInputDevice(audioInputDevices.data[0]);
+  }, audioInputDevices.data);
+
+  useEffect(() => {
+    if (!selectedAudioOutputDevice && audioOutputDevices.data)
+      setSelectedAudioOutputDevice(audioOutputDevices.data[0]);
+  }, audioOutputDevices.data);
   return <>{children}</>;
 }

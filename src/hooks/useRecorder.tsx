@@ -1,4 +1,7 @@
-import { selectedAudioDeviceAtom } from "@/atoms/audioDeviceAtom";
+import {
+  selectedAudioInputDeviceAtom,
+  selectedAudioOutputDeviceAtom,
+} from "@/atoms/audioDeviceAtom";
 import { useToast } from "@/components/ui/use-toast";
 import { useAudioDevice } from "@/context/AudioDeviceContext";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -6,7 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAtom } from "jotai";
 
 export function useRecorderMutation() {
-  const [selectedAudioDevice] = useAtom(selectedAudioDeviceAtom);
+  const [selectedAudioDevice] = useAtom(selectedAudioInputDeviceAtom);
   const recordingMutation = useMutation({
     mutationFn: async ({ command }: { command: "start" | "stop" }) => {
       switch (command) {
@@ -24,18 +27,22 @@ export function useRecorderMutation() {
 }
 
 export function useStartRecorderMutation() {
-  const [selectedAudioDevice] = useAtom(selectedAudioDeviceAtom);
+  const [selectedAudioInputDevice] = useAtom(selectedAudioInputDeviceAtom);
+  const [selectedAudioOutputDevice] = useAtom(selectedAudioOutputDeviceAtom);
   const { toast } = useToast();
   const recordingMutation = useMutation({
     mutationFn: async ({ conversation_id }: { conversation_id: number }) => {
-      if (!selectedAudioDevice) {
-        throw new Error("No audio device selected");
+      if (!selectedAudioInputDevice) {
+        throw new Error("No audio input device selected");
       }
-      console.log(conversation_id);
+      if (!selectedAudioOutputDevice) {
+        throw new Error("No audio output device selected");
+      }
       return await invoke("start_recording", {
         options: {
           user_id: "1",
-          audio_name: selectedAudioDevice,
+          audio_input_name: selectedAudioInputDevice,
+          audio_output_name: selectedAudioOutputDevice,
         },
         conversationId: conversation_id,
       });

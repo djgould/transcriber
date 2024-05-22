@@ -26,7 +26,8 @@ pub struct RecordingState {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RecordingOptions {
     pub user_id: String,
-    pub audio_name: String,
+    pub audio_input_name: String,
+    pub audio_output_name: String,
 }
 
 #[tauri::command]
@@ -48,20 +49,37 @@ pub async fn start_recording(
 
     println!("data_dir: {:?}", data_dir);
 
-    let audio_chunks_dir = data_dir
+    let audio_input_chunks_dir = data_dir
         .join("chunks/audio")
-        .join(conversation_id.to_string());
+        .join(conversation_id.to_string())
+        .join("input");
+    let audio_output_chunks_dir = data_dir
+        .join("chunks/audio")
+        .join(conversation_id.to_string())
+        .join("output");
 
-    clean_and_create_dir(&audio_chunks_dir)?;
+    clean_and_create_dir(&audio_input_chunks_dir)?;
+    clean_and_create_dir(&audio_output_chunks_dir)?;
 
-    let audio_name = if options.audio_name.is_empty() {
+    let audio_input_name = if options.audio_input_name.is_empty() {
         None
     } else {
-        Some(options.audio_name.clone())
+        Some(options.audio_input_name.clone())
     };
 
-    let media_recording_preparation =
-        prepare_media_recording(&options, &audio_chunks_dir, audio_name);
+    let audio_output_name = if options.audio_output_name.is_empty() {
+        None
+    } else {
+        Some(options.audio_output_name.clone())
+    };
+
+    let media_recording_preparation = prepare_media_recording(
+        &options,
+        &audio_input_chunks_dir,
+        &audio_output_chunks_dir,
+        audio_input_name,
+        audio_output_name,
+    );
     let media_recording_result = media_recording_preparation
         .await
         .map_err(|e| e.to_string())?;
@@ -71,24 +89,25 @@ pub async fn start_recording(
     state_guard.shutdown_flag = shutdown_flag.clone();
     state_guard.audio_uploading_finished = Arc::new(AtomicBool::new(false));
 
-    let audio_upload = start_transcription_loop(
-        audio_chunks_dir,
-        shutdown_flag.clone(),
-        state_guard.audio_uploading_finished.clone(),
-    );
+    // let audio_upload = start_transcription_loop(
+    //     audio_input_chunks_dir,
+    //     audio_output_chunks_dir,
+    //     shutdown_flag.clone(),
+    //     state_guard.audio_uploading_finished.clone(),
+    // );
 
     drop(state_guard);
 
     println!("Starting upload loops...");
 
-    match tokio::try_join!(audio_upload) {
-        Ok(_) => {
-            println!("Both upload loops completed successfully.");
-        }
-        Err(e) => {
-            eprintln!("An error occurred: {}", e);
-        }
-    }
+    // match tokio::try_join!(audio_upload) {
+    //     Ok(_) => {
+    //         println!("Both upload loops completed successfully.");
+    //     }
+    //     Err(e) => {
+    //         eprintln!("An error occurred: {}", e);
+    //     }
+    // }
     Ok(())
 }
 use tokio::io::AsyncBufReadExt;
@@ -267,16 +286,19 @@ fn clean_and_create_dir(dir: &Path) -> Result<(), String> {
 
 async fn prepare_media_recording(
     options: &RecordingOptions,
-    audio_chunks_dir: &Path,
-    audio_name: Option<String>,
+    audio_input_chunks_dir: &Path,
+    audio_output_chunks_dir: &Path,
+    audio_input_name: Option<String>,
+    audio_output_name: Option<String>,
 ) -> Result<MediaRecorder, String> {
     let mut media_recorder = MediaRecorder::new();
-    let audio_file_path = audio_chunks_dir.to_str().unwrap();
     media_recorder
         .start_media_recording(
             options.clone(),
-            audio_file_path,
-            audio_name.as_ref().map(String::as_str),
+            audio_input_chunks_dir,
+            audio_output_chunks_dir,
+            audio_input_name.as_ref().map(String::as_str),
+            audio_output_name.as_ref().map(String::as_str),
         )
         .await?;
     Ok(media_recorder)

@@ -1,5 +1,8 @@
 "use client";
-import { useAudioDevicesQuery } from "@/hooks/useMediaDevices";
+import {
+  useAudioInputDevicesQuery,
+  useAudioOutputDevicesQuery,
+} from "@/hooks/useMediaDevices";
 import {
   Select,
   SelectContent,
@@ -8,7 +11,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAtom } from "jotai";
-import { selectedAudioDeviceAtom } from "@/atoms/audioDeviceAtom";
+import {
+  selectedAudioInputDeviceAtom,
+  selectedAudioOutputDeviceAtom,
+} from "@/atoms/audioDeviceAtom";
 import { useEffect, useState } from "react";
 import {
   useStartRecorderMutation,
@@ -40,11 +46,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
+import { invoke } from "@tauri-apps/api/core";
 
 export default function Page() {
-  const audioDevices = useAudioDevicesQuery();
-  const [selectedAudioDevice, setSelectedAudioDevice] = useAtom(
-    selectedAudioDeviceAtom
+  const audioInputDevices = useAudioInputDevicesQuery();
+  const audioOutputDevices = useAudioOutputDevicesQuery();
+
+  const [selectedAudioInputDevice, setSelectedAudioInputDevice] = useAtom(
+    selectedAudioInputDeviceAtom
+  );
+  const [selectedAudioOutputDevice, setSelectedAudioOutputDevice] = useAtom(
+    selectedAudioOutputDeviceAtom
   );
   const [activeRecordingInfo, setActiveRecordingInfo] = useState<
     { conversation_id: number; status: "recording" | "stopping" } | undefined
@@ -97,14 +109,30 @@ export default function Page() {
   return (
     <div className="p-2 h-screen flex flex-col gap-4">
       <Select
-        value={selectedAudioDevice}
-        onValueChange={(value) => setSelectedAudioDevice(value)}
+        value={selectedAudioInputDevice}
+        onValueChange={(value) => setSelectedAudioInputDevice(value)}
       >
         <SelectTrigger className="w-full">
-          <SelectValue placeholder={selectedAudioDevice} />
+          <SelectValue placeholder={selectedAudioInputDevice} />
         </SelectTrigger>
         <SelectContent>
-          {audioDevices.data?.map((device) => (
+          {audioInputDevices.data?.map((device) => (
+            <SelectItem value={device}>{device}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={selectedAudioOutputDevice}
+        onValueChange={(value) => {
+          invoke("set_target_output_device", { device: value });
+          setSelectedAudioOutputDevice(value);
+        }}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder={selectedAudioOutputDevice} />
+        </SelectTrigger>
+        <SelectContent>
+          {audioOutputDevices.data?.map((device) => (
             <SelectItem value={device}>{device}</SelectItem>
           ))}
         </SelectContent>

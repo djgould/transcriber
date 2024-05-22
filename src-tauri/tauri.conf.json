@@ -41,9 +41,9 @@
       }
     }
   },
-  "productName": "platy",
+  "productName": "platy-backend",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.devgould.platy",
   "plugins": {
     "sql": {
       "preload": ["sqlite:test.db"]

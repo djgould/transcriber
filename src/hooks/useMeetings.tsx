@@ -1,4 +1,3 @@
-import { getDb } from "@/lib/db";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface RawMeeting {
