@@ -57,7 +57,17 @@
         "resizable": true,
         "title": "platy",
         "width": 300,
-        "decorations": false
+        "decorations": false,
+        "url": "/tray"
+      }, {
+        "label": "app-window",
+        "fullscreen": false,
+        "height": 800,
+        "resizable": true,
+        "title": "platy",
+        "width": 1200,
+        "decorations": true,
+        "url": "/main"
       }
     ],
     "security": {

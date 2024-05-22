@@ -110,28 +110,36 @@ pub fn run() {
         )
         .plugin(tauri_plugin_positioner::init())
         .setup(move |app| {
-            app.set_activation_policy(ActivationPolicy::Accessory);
-            let win = Arc::new(app.app_handle().get_webview_window("tray-window").unwrap());
-            win.hide();
-            let win_clone = win.clone();
-            win.on_window_event(move |event| match event {
+            let tray_window = Arc::new(app.app_handle().get_webview_window("tray-window").unwrap());
+            tray_window.hide();
+            let win_clone = tray_window.clone();
+            tray_window.on_window_event(move |event| match event {
                 WindowEvent::Focused(false) => {
                     win_clone.hide();
                 }
                 _ => {}
             });
+
+            let app_window = app.app_handle().get_webview_window("app-window").unwrap();
+            app_window.show();
             TrayIconBuilder::with_id("my-tray")
                 .icon(Image::from_path("./icons/icon.png")?)
                 .on_tray_icon_event(|app, event| {
                     tauri_plugin_positioner::on_tray_event(app.app_handle(), &event);
                     match event.click_type {
                         ClickType::Left => {
-                            let win = app.app_handle().get_webview_window("tray-window").unwrap();
-                            let isVisible = win.is_visible().unwrap();
-                            if !isVisible {
-                                win.as_ref().window().move_window(Position::TrayCenter);
-                                let _ = win.as_ref().window().show();
-                                let _ = win.set_focus();
+                            let tray_window =
+                                app.app_handle().get_webview_window("tray-window").unwrap();
+                            let is_visible = tray_window.is_visible().unwrap();
+                            if !is_visible {
+                                let _ = tray_window
+                                    .as_ref()
+                                    .window()
+                                    .move_window(Position::TrayCenter);
+                                let _ = tray_window.as_ref().window().show();
+                                let _ = tray_window.set_focus();
+                            } else {
+                                let _ = tray_window.as_ref().window().hide();
                             }
                         }
                         _ => {}
