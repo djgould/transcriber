@@ -32,15 +32,23 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { ReactElement, ReactNode } from "react";
+import { NextPage } from "next";
 
-export default function App({ Component, pageProps }: AppProps) {
-  const { pathname, asPath } = useRouter();
-  const isTray = asPath.includes("tray");
-  const backPath = isTray ? "/tray" : "/main";
+export type NextPageWithLayout<P = {}, IP = P> = NextPage<P, IP> & {
+  getLayout?: (page: ReactElement) => ReactNode;
+};
+
+type AppPropsWithLayout = AppProps & {
+  Component: NextPageWithLayout;
+};
+
+export default function App({ Component, pageProps }: AppPropsWithLayout) {
+  const getLayout = Component.getLayout ?? ((page) => page);
   return (
     <Providers>
       <div className="flex min-h-screen w-full flex-col bg-muted/40">
-        <Component {...pageProps} />
+        {getLayout(<Component {...pageProps} />)}
       </div>
       <Toaster />
     </Providers>

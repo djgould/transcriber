@@ -15,7 +15,7 @@ import {
   selectedAudioInputDeviceAtom,
   selectedAudioOutputDeviceAtom,
 } from "@/atoms/audioDeviceAtom";
-import { useEffect, useState } from "react";
+import { ReactElement, useEffect, useState } from "react";
 import {
   useStartRecorderMutation,
   useStopRecorderMutation,
@@ -48,8 +48,10 @@ import {
 import Link from "next/link";
 import { invoke } from "@tauri-apps/api/core";
 import NavBar from "@/components/nav/NavBar";
+import { MainLayout } from "@/components/layout/main";
+import { NextPageWithLayout } from "./_app";
 
-export default function Page() {
+const Page: NextPageWithLayout = () => {
   const audioInputDevices = useAudioInputDevicesQuery();
   const audioOutputDevices = useAudioOutputDevicesQuery();
 
@@ -108,59 +110,58 @@ export default function Page() {
   };
 
   return (
-    <>
-      <NavBar />
-      <div className="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
-        <div className="p-2 h-screen flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Your Converstations</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-y-scroll">
-              <Table>
-                <TableCaption>
-                  A list of your recent conversations.
-                </TableCaption>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[100px]">Created at</TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {conversations.data?.map((conversation) => (
-                    <TableRow key={conversation.id}>
-                      <TableCell className="font-medium">
-                        {new Date(conversation.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="font-medium flex justify-between">
-                        <Link href={`/conversations/${conversation.id}`}>
-                          <Button size={"sm"} variant={"secondary"}>
-                            <Eye />
-                          </Button>
-                        </Link>
+    <div className="p-2 h-screen flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Your Converstations</CardTitle>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-scroll">
+          <Table>
+            <TableCaption>A list of your recent conversations.</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[100px]">Created at</TableHead>
+                <TableHead className="w-[100px]">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {conversations.data?.map((conversation) => (
+                <TableRow key={conversation.id}>
+                  <TableCell className="font-medium">
+                    {new Date(conversation.created_at).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="font-medium flex justify-between">
+                    <Link href={`/main/conversations/${conversation.id}`}>
+                      <Button size={"sm"} variant={"secondary"}>
+                        <Eye />
+                      </Button>
+                    </Link>
 
-                        <Button
-                          size={"sm"}
-                          variant={"secondary"}
-                          onClick={() => {
-                            deleteConversationMutation.mutate({
-                              conversationId: conversation.id,
-                            });
-                          }}
-                        >
-                          <Trash />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-            <CardFooter className="flex flex-col gap-4"></CardFooter>
-          </Card>
-        </div>
-      </div>
-    </>
+                    <Button
+                      size={"sm"}
+                      variant={"secondary"}
+                      onClick={() => {
+                        deleteConversationMutation.mutate({
+                          conversationId: conversation.id,
+                        });
+                      }}
+                    >
+                      <Trash />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+        <CardFooter className="flex flex-col gap-4"></CardFooter>
+      </Card>
+    </div>
   );
-}
+};
+
+Page.getLayout = function getLayout(page: ReactElement) {
+  return <MainLayout>{page}</MainLayout>;
+};
+
+export default Page;

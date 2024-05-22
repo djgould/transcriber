@@ -12,9 +12,18 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompleteTranscription } from "@/hooks/useTranscription";
-import { NextPageWithLayout } from "../_app";
-import { TrayLayout } from "@/components/layout/tray";
+import { MainLayout } from "@/components/layout/main";
 import { ReactElement } from "react";
+import { NextPageWithLayout } from "@/pages/_app";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const Page: NextPageWithLayout = () => {
   const {
@@ -44,19 +53,34 @@ const Page: NextPageWithLayout = () => {
     );
   }
 
+  const date = new Date(conversation?.data?.created_at);
+
   return (
     <div className="p-2 h-screen flex flex-col gap-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-lg text-center">
-            Conversation{" "}
-            {new Date(conversation?.data?.created_at).toLocaleDateString()}
+            Conversation {date.toLocaleString()}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-y-scroll">
-          {completeTranscription.data?.full_text.map((transcription) => {
-            return transcription;
-          })}
+          <Table>
+            <TableBody>
+              {completeTranscription.data?.full_text.map((transcription, i) => {
+                return (
+                  <TableRow>
+                    <TableCell className="min-w-32">
+                      {i % 2 == 0 ? "Speaker 1" : "Speaker 2"}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {" "}
+                      {transcription}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </CardContent>
         <CardFooter className="flex flex-col gap-4"></CardFooter>
       </Card>
@@ -65,7 +89,7 @@ const Page: NextPageWithLayout = () => {
 };
 
 Page.getLayout = function getLayout(page: ReactElement) {
-  return <TrayLayout>{page}</TrayLayout>;
+  return <MainLayout>{page}</MainLayout>;
 };
 
 export default Page;

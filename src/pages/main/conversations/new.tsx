@@ -25,8 +25,8 @@ import {
   useStartRecorderMutation,
   useStopRecorderMutation,
 } from "@/hooks/useRecorder";
-import { NextPageWithLayout } from "../_app";
-import { TrayLayout } from "@/components/layout/tray";
+import { MainLayout } from "@/components/layout/main";
+import { NextPageWithLayout } from "@/pages/_app";
 
 const Page: NextPageWithLayout = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -105,7 +105,7 @@ const Page: NextPageWithLayout = () => {
 };
 
 Page.getLayout = function getLayout(page: ReactElement) {
-  return <TrayLayout>{page}</TrayLayout>;
+  return <MainLayout>{page}</MainLayout>;
 };
 
 export default Page;
