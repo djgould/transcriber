@@ -1,10 +1,12 @@
 use byteorder::{ByteOrder, LittleEndian};
 use core_foundation::base::TCFType;
+use coreaudio::audio_unit::audio_format::LinearPcmFlags;
 use coreaudio::audio_unit::macos_helpers::{
-    get_audio_device_ids, get_audio_device_ids_for_scope, get_audio_device_supports_scope,
-    get_device_id_from_name, get_device_name,
+    audio_unit_from_device_id, get_audio_device_ids, get_audio_device_ids_for_scope,
+    get_audio_device_supports_scope, get_device_id_from_name, get_device_name,
 };
-use coreaudio::audio_unit::Scope;
+use coreaudio::audio_unit::render_callback::{self, data};
+use coreaudio::audio_unit::{AudioUnit, Element, IOType, Scope};
 use coreaudio::sys::{
     kAudioHardwarePropertyTranslateUIDToDevice, kAudioObjectPropertyElementMaster,
     kAudioObjectPropertyScopeGlobal, kAudioObjectSystemObject, AudioDeviceID,
@@ -54,7 +56,7 @@ pub struct MediaRecorder {
     ffmpeg_audio_output_stdin: Option<Arc<Mutex<Option<tokio::process::ChildStdin>>>>,
     device_name: Option<String>,
     input_stream: Option<cpal::Stream>,
-    output_stream: Option<cpal::Stream>,
+    output_audio_unit: Option<AudioUnit>,
     audio_input_channel_sender: Option<mpsc::Sender<Vec<u8>>>,
     audio_input_channel_receiver: Option<mpsc::Receiver<Vec<u8>>>,
     audio_output_channel_sender: Option<mpsc::Sender<Vec<u8>>>,
@@ -79,7 +81,7 @@ impl MediaRecorder {
             ffmpeg_audio_output_stdin: None,
             device_name: None,
             input_stream: None,
-            output_stream: None,
+            output_audio_unit: None,
             audio_input_channel_sender: None,
             audio_input_channel_receiver: None,
             audio_output_channel_sender: None,
@@ -103,7 +105,7 @@ impl MediaRecorder {
         let (audio_input_tx, audio_input_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(2048);
         let (audio_output_tx, audio_output_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(2048);
 
-        // let audio_input_start_time = Arc::new(Mutex::new(None));
+        let audio_input_start_time = Arc::new(Mutex::new(None));
         let audio_output_start_time = Arc::new(Mutex::new(None));
 
         self.audio_input_channel_sender = Some(audio_input_tx);
@@ -143,51 +145,37 @@ impl MediaRecorder {
                     .expect("No supported input config")
             })
             .with_max_sample_rate();
-        let output_config: cpal::SupportedStreamConfig = output_device
-            .supported_output_configs()
-            .expect("Failed to get supported output configs")
-            .find(|c| {
-                c.sample_format() == SampleFormat::F32
-                    || c.sample_format() == SampleFormat::I16
-                    || c.sample_format() == SampleFormat::I8
-                    || c.sample_format() == SampleFormat::I32
-            })
-            .unwrap_or_else(|| {
-                output_device
-                    .supported_output_configs()
-                    .expect("Failed to get supported output configs")
-                    .next()
-                    .expect("No supported output config")
-            })
-            .with_max_sample_rate();
 
-        // if custom_input_device != Some("None") {
-        //     println!("Building input stream...");
-        //     println!("input_device {}", input_device.name().unwrap());
-        //     let stream_result: Result<cpal::Stream, cpal::BuildStreamError> = build_audio_stream(
-        //         &input_config,
-        //         &input_device,
-        //         audio_input_start_time,
-        //         audio_input_channel_sender,
-        //     );
+        if custom_input_device != Some("None") {
+            println!("Building input stream...");
+            println!("input_device {}", input_device.name().unwrap());
+            let stream_result: Result<cpal::Stream, cpal::BuildStreamError> = build_audio_stream(
+                &input_config,
+                &input_device,
+                audio_input_start_time,
+                audio_input_channel_sender,
+            );
 
-        //     let stream = stream_result.map_err(|_| "Failed to build input stream")?;
-        //     self.input_stream = Some(stream);
-        //     self.trigger_play_input()?;
-        // }
+            let stream = stream_result.map_err(|_| "Failed to build input stream")?;
+            self.input_stream = Some(stream);
+            self.trigger_play_input()?;
+        }
 
         if custom_output_device != Some("None") {
             println!("Building output stream...");
             println!("output_device {}", output_device.name().unwrap());
-            let stream_result: Result<cpal::Stream, cpal::BuildStreamError> = build_audio_stream(
-                &output_config,
-                &output_device,
+            let device_id = audio_device_id_for_device_uid("Mirror_UID");
+            let result = build_coreaudio_audio_stream(
+                device_id,
+                44100.0,
+                2,
                 audio_output_start_time,
                 audio_output_channel_sender,
             );
 
-            let stream = stream_result.map_err(|_| "Failed to build input stream")?;
-            self.output_stream = Some(stream);
+            let output_audio_unit =
+                result.map_err(|err| format!("Failed to build input stream: {}", err))?;
+            self.output_audio_unit = Some(output_audio_unit);
             self.trigger_play_output()?;
         }
 
@@ -196,24 +184,34 @@ impl MediaRecorder {
         let audio_input_file_path = audio_input_chunks_dir.to_str().unwrap();
         let audio_output_file_path = audio_output_chunks_dir.to_str().unwrap();
 
-        // let input_process = self
-        //     .create_and_start_recording_process(
-        //         &input_device,
-        //         &input_config,
-        //         self.ffmpeg_audio_input_stdin.clone(),
-        //         &audio_input_file_path,
-        //         custom_input_device,
-        //         audio_input_channel_receiver,
-        //     )
-        //     .await?;
+        let input_process = self
+            .create_and_start_recording_process(
+                &input_device,
+                input_config.sample_rate().0,
+                input_config.channels(),
+                match input_config.sample_format() {
+                    SampleFormat::I8 => "s8",
+                    SampleFormat::I16 => "s16le",
+                    SampleFormat::I32 => "s32le",
+                    SampleFormat::F32 => "f32le",
+                    _ => panic!("Unsupported sample format."),
+                },
+                self.ffmpeg_audio_input_stdin.clone(),
+                &audio_input_file_path,
+                custom_input_device,
+                audio_input_channel_receiver,
+            )
+            .await?;
 
-        // println!("created input recording process!");
+        println!("created input recording process!");
 
-        // self.ffmpeg_audio_input_process = input_process;
+        self.ffmpeg_audio_input_process = input_process;
         let output_process = self
             .create_and_start_recording_process(
                 &output_device,
-                &output_config,
+                44100.0 as u32,
+                1,
+                "f32le",
                 self.ffmpeg_audio_output_stdin.clone(),
                 &audio_output_file_path,
                 custom_output_device,
@@ -233,21 +231,23 @@ impl MediaRecorder {
     async fn create_and_start_recording_process(
         &mut self,
         device: &Device,
-        device_config: &SupportedStreamConfig,
+        sample_rate: u32,
+        channels: u16,
+        sample_format: &str,
         ffmpeg_audio_stdin: Option<Arc<Mutex<Option<tokio::process::ChildStdin>>>>,
         audio_file_path: &str,
         custom_device: Option<&str>,
         audio_channel_receiver: Arc<Mutex<Option<mpsc::Receiver<Vec<u8>>>>>,
     ) -> Result<Option<Child>, String> {
-        let sample_rate = device_config.sample_rate().0;
-        let channels = device_config.channels();
-        let sample_format = match device_config.sample_format() {
-            SampleFormat::I8 => "s8",
-            SampleFormat::I16 => "s16le",
-            SampleFormat::I32 => "s32le",
-            SampleFormat::F32 => "f32le",
-            _ => panic!("Unsupported sample format."),
-        };
+        // let sample_rate: u32 = device_config.sample_rate().0;
+        // let channels: u16 = device_config.channels();
+        // let sample_format: &str = match device_config.sample_format() {
+        //     SampleFormat::I8 => "s8",
+        //     SampleFormat::I16 => "s16le",
+        //     SampleFormat::I32 => "s32le",
+        //     SampleFormat::F32 => "f32le",
+        //     _ => panic!("Unsupported sample format."),
+        // };
 
         println!("Sample rate: {}", sample_rate);
         println!("Channels: {}", channels);
@@ -374,8 +374,10 @@ impl MediaRecorder {
     }
 
     pub fn trigger_play_output(&mut self) -> Result<(), &'static str> {
-        if let Some(ref mut stream) = self.output_stream {
-            stream.play().map_err(|_| "Failed to play stream")?;
+        if let Some(ref mut output_audio_unit) = self.output_audio_unit {
+            output_audio_unit
+                .start()
+                .map_err(|_| "Failed to play stream")?;
             println!("Audio recording playing.");
         } else {
             return Err("Starting the recording did not work");
@@ -446,8 +448,10 @@ impl MediaRecorder {
             return Err("Original recording was not started".to_string());
         }
 
-        if let Some(ref mut stream) = self.output_stream {
-            stream.pause().map_err(|_| "Failed to pause stream")?;
+        if let Some(ref mut output_audio_unit) = self.output_audio_unit {
+            output_audio_unit
+                .stop()
+                .map_err(|_| "Failed to pause stream")?;
             println!("Audio recording paused.");
         } else {
             return Err("Original recording was not started".to_string());
@@ -967,6 +971,95 @@ fn build_audio_stream(
             _sample_format => Err(cpal::BuildStreamError::DeviceNotAvailable),
         };
     stream_result
+}
+
+type S = f32;
+const SAMPLE_FORMAT: coreaudio::audio_unit::SampleFormat = coreaudio::audio_unit::SampleFormat::F32;
+fn build_coreaudio_audio_stream(
+    device_id: AudioDeviceID,
+    sample_rate: f64,
+    channels: u32,
+    audio_start_time: Arc<Mutex<Option<Instant>>>,
+    audio_channel_sender: Option<mpsc::Sender<Vec<u8>>>,
+) -> Result<AudioUnit, coreaudio::Error> {
+    println!("Input device: {}", get_device_name(device_id).unwrap());
+    let format_flag = match SAMPLE_FORMAT {
+        coreaudio::audio_unit::SampleFormat::F32 => {
+            coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_FLOAT
+                | coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_PACKED
+        }
+        coreaudio::audio_unit::SampleFormat::I32
+        | coreaudio::audio_unit::SampleFormat::I16
+        | coreaudio::audio_unit::SampleFormat::I8 => {
+            coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_SIGNED_INTEGER
+                | coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_PACKED
+        }
+        _ => {
+            unimplemented!("Please use one of the packed formats");
+        }
+    };
+
+    let in_stream_format = coreaudio::audio_unit::StreamFormat {
+        sample_rate: sample_rate,
+        sample_format: SAMPLE_FORMAT,
+        flags: format_flag,
+        channels: 1,
+    };
+    let is_float =
+        format_flag.contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_FLOAT);
+    let is_signed_integer = format_flag
+        .contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_SIGNED_INTEGER);
+    let is_packed =
+        format_flag.contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_PACKED);
+    println!(
+        "{} {} {} {} {}",
+        !in_stream_format
+            .flags
+            .contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_NON_INTERLEAVED),
+        is_float && !is_signed_integer && is_packed,
+        is_float,
+        !is_signed_integer,
+        is_packed
+    );
+    let mut input_audio_unit = audio_unit_from_device_id(device_id, true)?;
+    let id = coreaudio::sys::kAudioUnitProperty_StreamFormat;
+    let asbd = in_stream_format.to_asbd();
+    input_audio_unit.set_property(id, Scope::Output, Element::Input, Some(&asbd))?;
+
+    type Args = render_callback::Args<data::Interleaved<f32>>;
+    // Define input callback
+    let callback = move |args: render_callback::Args<data::Interleaved<f32>>| {
+        let Args {
+            num_frames,
+            mut data,
+            ..
+        } = args;
+        let audio_start_time = Arc::clone(&audio_start_time);
+
+        let mut first_frame_time_guard = audio_start_time.try_lock();
+
+        if let Some(sender) = &audio_channel_sender {
+            let mut bytes = vec![0; data.buffer.len() * 4];
+            LittleEndian::write_f32_into(data.buffer, &mut bytes);
+            if sender.try_send(bytes).is_err() {
+                eprintln!("Channel send error. Dropping data.");
+            }
+        }
+
+        if let Ok(ref mut start_time_option) = first_frame_time_guard {
+            if start_time_option.is_none() {
+                **start_time_option = Some(Instant::now());
+
+                println!("Audio start time captured");
+            }
+        }
+
+        Ok(())
+    };
+
+    input_audio_unit.set_input_callback(callback)?;
+
+    Ok(input_audio_unit)
 }
 
 async fn start_recording_process(

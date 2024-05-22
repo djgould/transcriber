@@ -112,7 +112,7 @@ pub async fn start_recording(
 }
 use tokio::io::AsyncBufReadExt;
 
-async fn combine_segments(
+async fn concat_segments(
     audio_chunks_dir: &PathBuf,
 ) -> Result<tokio::process::Child, std::io::Error> {
     let ffmpeg_binary_path_str = ffmpeg_path_as_str().unwrap().to_owned();
@@ -153,6 +153,50 @@ async fn combine_segments(
         concat_file_path.to_str().unwrap(),
         "-c",
         "copy",
+        combined_output_file_path.to_str().unwrap(),
+    ];
+
+    // Print the generated args for debugging
+    println!("FFmpeg args: {:?}", args);
+
+    let mut process = Command::new(ffmpeg_binary_path_str).args(args).spawn()?;
+
+    if let Some(process_stderr) = process.stderr.take() {
+        tokio::spawn(async move {
+            use tokio::io::BufReader;
+
+            let mut process_reader = BufReader::new(process_stderr).lines();
+            while let Ok(Some(line)) = process_reader.next_line().await {
+                eprintln!("FFmpeg process STDERR: {}", line);
+            }
+        });
+    }
+
+    process.wait().await?;
+    Ok(process)
+}
+
+//ffmpeg -i stream1_combined.wav -i stream2_combined.wav -filter_complex "[0:a][1:a]amerge=inputs=2,pan=mono|c0=.5*c0+.5*c1[aout]" -map "[aout]" -c:a pcm_s16le output_mono.wav
+async fn combine_segments(
+    audio_chunks_dir: &PathBuf,
+) -> Result<tokio::process::Child, std::io::Error> {
+    let ffmpeg_binary_path_str = ffmpeg_path_as_str().unwrap().to_owned();
+
+    let input_concat_file = audio_chunks_dir.join("input").join("combined.wav");
+    let output_concat_file = audio_chunks_dir.join("output").join("combined.wav");
+    let combined_output_file_path = audio_chunks_dir.join("combined.wav");
+
+    let args = vec![
+        "-i",
+        input_concat_file.to_str().unwrap(),
+        "-i",
+        output_concat_file.to_str().unwrap(),
+        "-filter_complex",
+        "[0:a][1:a]amerge=inputs=2,pan=mono|c0=.5*c0+.5*c1[aout]",
+        "-map",
+        "[aout]",
+        "-c:a",
+        "pcm_s16le",
         combined_output_file_path.to_str().unwrap(),
     ];
 
@@ -217,20 +261,27 @@ pub async fn stop_recording(
     //     }
     // }
 
-    while !guard.audio_uploading_finished.load(Ordering::SeqCst) {
-        println!("Waiting for uploads to finish...");
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
+    // while !guard.audio_uploading_finished.load(Ordering::SeqCst) {
+    //     println!("Waiting for uploads to finish...");
+    //     tokio::time::sleep(Duration::from_millis(50)).await;
+    // }
 
     let data_dir = guard.data_dir.clone();
     let recording_dir = data_dir
         .expect("no data directory")
         .join("chunks/audio")
         .join(conversation_id.to_string());
+    let input_dir = recording_dir.join("input");
+    let output_dir = recording_dir.join("output");
+    concat_segments(&input_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    concat_segments(&output_dir)
+        .await
+        .map_err(|e| e.to_string())?;
     combine_segments(&recording_dir)
         .await
         .map_err(|e| e.to_string())?;
-
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     println!("combined segments..");
