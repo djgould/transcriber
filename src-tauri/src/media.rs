@@ -10,8 +10,7 @@ use coreaudio::audio_unit::{AudioUnit, Element, IOType, Scope};
 use coreaudio::sys::{
     kAudioHardwarePropertyTranslateUIDToDevice, kAudioObjectPropertyElementMaster,
     kAudioObjectPropertyScopeGlobal, kAudioObjectSystemObject, AudioDeviceID,
-    AudioObjectGetPropertyData, AudioObjectPropertyAddress, AudioObjectPropertyScope,
-    AudioValueTranslation,
+    AudioObjectGetPropertyData, AudioObjectPropertyAddress,
 };
 use coreaudio_sys::{
     kAudioDevicePropertyDeviceUID, kAudioHardwareNoError, kAudioHardwarePropertyDevices,
@@ -1029,11 +1028,7 @@ fn build_coreaudio_audio_stream(
     type Args = render_callback::Args<data::Interleaved<f32>>;
     // Define input callback
     let callback = move |args: render_callback::Args<data::Interleaved<f32>>| {
-        let Args {
-            num_frames,
-            mut data,
-            ..
-        } = args;
+        let Args { data, .. } = args;
         let audio_start_time = Arc::clone(&audio_start_time);
 
         let mut first_frame_time_guard = audio_start_time.try_lock();

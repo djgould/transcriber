@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     fs::{read_dir, read_to_string, File},
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -13,6 +13,8 @@ use std::{
 use futures::future::join_all;
 use hound::{SampleFormat, WavReader};
 use serde::{Deserialize, Serialize};
+use tauri::State;
+use tokio::sync::Mutex;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 use crate::{recorder::RecordingState, utils::load_segment_list};
@@ -22,7 +24,106 @@ pub struct TranscriptionJSON {
     pub full_text: Vec<String>,
 }
 
-pub fn transcribe_wav_file(
+#[tauri::command]
+pub async fn transcribe(
+    state: State<'_, Arc<Mutex<RecordingState>>>,
+    conversation_id: u64,
+) -> Result<Vec<String>, String> {
+    let mut guard: tokio::sync::MutexGuard<RecordingState> = state.lock().await;
+    let data_dir = guard.data_dir.clone();
+    let recording_dir = data_dir
+        .expect("no data directory")
+        .join("chunks/audio")
+        .join(conversation_id.to_string());
+    let combined_audio_file = recording_dir.join("combined.wav");
+    let transcription_output_file = recording_dir.join("transcription.json");
+    let full_text = transcribe_wav_file(&combined_audio_file)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(full_text)
+}
+
+pub async fn transcribe_wav_file(wav_filepath: &PathBuf) -> Result<Vec<String>, String> {
+    let filepath_str = wav_filepath.to_str().unwrap_or_default().to_owned();
+    println!("{}", filepath_str);
+    use std::path::Path;
+
+    let whisper_path =
+        Path::new("/Users/devingould/platy/src-tauri/src/models/ggml-small.en-tdrz.bin");
+    if !whisper_path.exists() {
+        panic!("whisper file doesn't exist");
+    }
+
+    let mut reader = WavReader::open(filepath_str).expect("failed to read file");
+    let spec = reader.spec();
+
+    if spec.channels != 1 {
+        panic!("expected mono audio file");
+    }
+    if spec.sample_format != SampleFormat::Int {
+        panic!("expected integer sample format");
+    }
+    if spec.bits_per_sample != 16 {
+        panic!("expected 16 bits per sample");
+    }
+
+    // Read all samples
+    let original_samples: Vec<i16> = reader
+        .samples::<i16>()
+        .map(|s| s.expect("failed to read sample"))
+        .collect();
+    let mut samples = vec![0.0f32; original_samples.len()];
+
+    whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
+        .expect("failed to convert samples");
+
+    let ctx = WhisperContext::new_with_params(
+        &whisper_path.to_string_lossy(),
+        WhisperContextParameters::default(),
+    )
+    .expect("failed to open model");
+    let mut state = ctx.create_state().expect("failed to create state");
+    let mut params = FullParams::new(SamplingStrategy::default());
+    params.set_initial_prompt("experience");
+    params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
+    params.set_tdrz_enable(true);
+
+    let st = std::time::Instant::now();
+    state
+        .full(params, &samples)
+        .expect("failed to transcribe audio");
+
+    let et = std::time::Instant::now();
+
+    let num_segments = state
+        .full_n_segments()
+        .expect("failed to get number of segments");
+    let mut full_text: Vec<String> = vec![String::new()];
+    let mut full_text_index = 0;
+    for i in 0..num_segments {
+        let segment = state
+            .full_get_segment_text(i)
+            .expect("failed to get segment");
+        full_text[full_text_index].push_str(&segment);
+        if state.full_get_segment_speaker_turn_next(i) {
+            full_text.push(String::new());
+            full_text_index += 1
+        }
+        let start_timestamp = state
+            .full_get_segment_t0(i)
+            .expect("failed to get start timestamp");
+        let end_timestamp = state
+            .full_get_segment_t1(i)
+            .expect("failed to get end timestamp");
+        println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
+    }
+    println!("Transcription took {}ms", (et - st).as_millis());
+
+    Ok(full_text)
+}
+
+pub fn transcribe_wav_file_and_write(
     wav_filepath: &PathBuf,
     transcription_output_file_path: &PathBuf,
 ) -> Result<(), String> {
@@ -143,7 +244,7 @@ pub async fn start_transcription_loop(
             if segment_path.is_file() {
                 let segment_path_clone = segment_path.clone();
                 transcription_tasks.push(tokio::spawn(async move {
-                    transcribe_wav_file(&segment_path_clone, &transcription_path)?;
+                    transcribe_wav_file_and_write(&segment_path_clone, &transcription_path)?;
 
                     Ok(())
                 }));
@@ -262,4 +363,30 @@ pub async fn get_complete_transcription(
     }
 
     Ok(merged_content)
+}
+
+pub async fn load_transcription(transcription_path: PathBuf) -> Result<TranscriptionJSON, String> {
+    let mut json = TranscriptionJSON {
+        full_text: Vec::new(),
+    };
+
+    let content = read_to_string(&transcription_path).map_err(|err| {
+        format!(
+            "Failed to read file {}: {}",
+            transcription_path.display(),
+            err
+        )
+    })?;
+
+    let json_content: TranscriptionJSON = serde_json::from_str(&content).map_err(|err| {
+        format!(
+            "Failed to parse JSON in file {}: {}",
+            transcription_path.display(),
+            err
+        )
+    })?;
+
+    json.full_text.extend(json_content.full_text);
+
+    Ok(json)
 }

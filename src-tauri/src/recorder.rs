@@ -12,7 +12,11 @@ use tauri::State;
 use tokio::process::Command;
 
 use crate::media::MediaRecorder;
-use crate::transcribe::{start_transcription_loop, transcribe_wav_file};
+use crate::summarize::{generate_action_items, generate_title, summarize};
+use crate::transcribe::{
+    load_transcription, start_transcription_loop, transcribe_wav_file,
+    transcribe_wav_file_and_write,
+};
 use crate::utils::ffmpeg_path_as_str;
 
 pub struct RecordingState {
@@ -235,7 +239,7 @@ pub async fn stop_recording(
     state: State<'_, Arc<Mutex<RecordingState>>>,
     conversation_id: u64,
 ) -> Result<(), String> {
-    let mut guard = state.lock().await;
+    let mut guard: tokio::sync::MutexGuard<RecordingState> = state.lock().await;
 
     println!("Stopping media recording...");
 
@@ -288,9 +292,16 @@ pub async fn stop_recording(
 
     let combined_audio_file = recording_dir.join("combined.wav");
     let transcription_output_file = recording_dir.join("transcription.json");
-    transcribe_wav_file(&combined_audio_file, &transcription_output_file)
+    transcribe_wav_file_and_write(&combined_audio_file, &transcription_output_file)
         .map_err(|e| e.to_string())?;
-
+    let transcription = load_transcription(transcription_output_file)
+        .await
+        .expect("Failed to load transcription");
+    let summary = summarize(transcription.full_text.join(" CHANGE_SPEAKER_TOKEN "))
+        .await
+        .expect("Couldn't generate summary");
+    let action_items = generate_action_items(&summary);
+    let title = generate_title(&summary);
     println!("All recordings and uploads stopped.");
 
     Ok(())

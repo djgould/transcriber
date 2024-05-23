@@ -3,6 +3,7 @@
 
 mod media;
 mod recorder;
+mod summarize;
 mod transcribe;
 mod utils;
 
@@ -27,12 +28,12 @@ use tauri_plugin_positioner::WindowExt;
 use tauri_plugin_sql::{Migration, MigrationKind};
 use transcribe::{get_complete_transcription, get_real_time_transcription};
 
+use crate::media::set_configurator_id;
 use media::{
     enumerate_audio_input_devices, enumerate_audio_output_devices, set_target_output_device,
 };
 use recorder::{delete_recording_data, start_recording, stop_recording, RecordingState};
-
-use crate::media::set_configurator_id;
+use summarize::summarize;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -171,7 +172,7 @@ pub fn run() {
             delete_recording_data,
             enumerate_audio_input_devices,
             enumerate_audio_output_devices,
-            set_target_output_device
+            set_target_output_device,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
