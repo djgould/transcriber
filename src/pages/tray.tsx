@@ -81,12 +81,12 @@ const Page: NextPageWithLayout = () => {
     createConversationMutation.mutate(undefined, {
       onSuccess(conversation) {
         setActiveRecordingInfo({
-          conversation_id: conversation.lastInsertId,
+          conversation_id: conversation.id,
           status: "recording",
         });
         startRecorderMutation.mutate(
           {
-            conversation_id: conversation.lastInsertId,
+            conversation_id: conversation.id,
           },
           {
             onError: () => {

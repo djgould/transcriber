@@ -1,12 +1,10 @@
 use byteorder::{ByteOrder, LittleEndian};
-use core_foundation::base::TCFType;
-use coreaudio::audio_unit::audio_format::LinearPcmFlags;
 use coreaudio::audio_unit::macos_helpers::{
-    audio_unit_from_device_id, get_audio_device_ids, get_audio_device_ids_for_scope,
+    audio_unit_from_device_id, get_audio_device_ids_for_scope,
     get_audio_device_supports_scope, get_device_id_from_name, get_device_name,
 };
 use coreaudio::audio_unit::render_callback::{self, data};
-use coreaudio::audio_unit::{AudioUnit, Element, IOType, Scope};
+use coreaudio::audio_unit::{AudioUnit, Element, Scope};
 use coreaudio::sys::{
     kAudioHardwarePropertyTranslateUIDToDevice, kAudioObjectPropertyElementMaster,
     kAudioObjectPropertyScopeGlobal, kAudioObjectSystemObject, AudioDeviceID,
@@ -15,20 +13,17 @@ use coreaudio::sys::{
 use coreaudio_sys::{
     kAudioDevicePropertyDeviceUID, kAudioHardwareNoError, kAudioHardwarePropertyDevices,
     kAudioHardwarePropertyTranslateUIDToBox, kAudioObjectPropertyIdentify,
-    kAudioObjectPropertyName, kAudioObjectUnknown, kCFAllocatorDefault, kCFStringEncodingUTF8,
-    noErr, AudioObjectGetPropertyDataSize, AudioObjectID, AudioObjectPropertySelector,
+    kAudioObjectPropertyName, kAudioObjectUnknown, kCFAllocatorDefault, kCFStringEncodingUTF8, AudioObjectGetPropertyDataSize, AudioObjectPropertySelector,
     AudioObjectSetPropertyData, CFRelease, CFStringCreateWithCString, CFStringRef, CFTypeRef,
-    OSStatus, SInt32,
 };
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Device, SampleFormat, SupportedStreamConfig};
+use cpal::{Device, SampleFormat};
 use std::ffi::{CStr, CString};
 use std::io::Error;
-use std::mem::{size_of, size_of_val};
 use std::os::raw::{c_char, c_void};
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::process::Stdio;
-use std::ptr::{self, null};
+use std::ptr::{null};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -631,7 +626,7 @@ fn audio_device_uid_for_device_id(device_id: AudioDeviceID) -> Result<String, co
 }
 
 fn all_audio_output_devices() -> Vec<AudioDeviceID> {
-    let mut device_id: coreaudio_sys::AudioDeviceID = coreaudio_sys::kAudioObjectUnknown;
+    let device_id: coreaudio_sys::AudioDeviceID = coreaudio_sys::kAudioObjectUnknown;
     let mut size = std::mem::size_of::<coreaudio_sys::AudioDeviceID>() as u32;
     let property_address = coreaudio_sys::AudioObjectPropertyAddress {
         mSelector: kAudioHardwarePropertyDevices,

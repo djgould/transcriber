@@ -14,7 +14,7 @@ use tokio::process::Command;
 use crate::media::MediaRecorder;
 use crate::summarize::{generate_action_items, generate_title, summarize};
 use crate::transcribe::{
-    load_transcription, start_transcription_loop, transcribe_wav_file,
+    load_transcription,
     transcribe_wav_file_and_write,
 };
 use crate::utils::ffmpeg_path_as_str;

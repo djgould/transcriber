@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
 mod media;
 mod recorder;
 mod summarize;
@@ -15,61 +16,38 @@ use ffmpeg_sidecar::download::unpack_ffmpeg;
 use ffmpeg_sidecar::error::Result as FfmpegResult;
 use ffmpeg_sidecar::paths::sidecar_dir;
 use ffmpeg_sidecar::version::ffmpeg_version;
+use migration::Migrator;
+use migration::MigratorTrait;
+use service::sea_orm::Database;
+use service::sea_orm::DatabaseConnection;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use tauri::async_runtime;
 use tauri::image::Image;
 use tauri::tray::ClickType;
 use tauri::tray::TrayIconBuilder;
-use tauri::ActivationPolicy;
 use tauri::Manager;
 use tauri::WindowEvent;
 use tauri_plugin_positioner::Position;
 use tauri_plugin_positioner::WindowExt;
-use tauri_plugin_sql::{Migration, MigrationKind};
 use transcribe::{get_complete_transcription, get_real_time_transcription};
 
 use crate::media::set_configurator_id;
+use commands::conversation::{
+    create_conversation, delete_conversation, get_conversation, get_conversations,
+};
 use media::{
     enumerate_audio_input_devices, enumerate_audio_output_devices, set_target_output_device,
 };
 use recorder::{delete_recording_data, start_recording, stop_recording, RecordingState};
-use summarize::summarize;
+#[derive(Clone)]
+struct AppState {
+    db: DatabaseConnection,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![
-        // Define your migrations here
-        Migration {
-            version: 1,
-            description: "create_initial_tables",
-            sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 2,
-            description: "create_metting_table",
-            sql: "CREATE TABLE meetings (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                transcription TEXT NOT NULL, -- Store JSON data as text
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 3,
-            description: "create_conversations_table",
-            sql: "CREATE TABLE conversations (
-                id INTEGER PRIMARY KEY,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );",
-            kind: MigrationKind::Up,
-        },
-    ];
-
-    set_configurator_id();
+    let _ = set_configurator_id();
 
     fn handle_ffmpeg_installation() -> FfmpegResult<()> {
         if ffmpeg_is_installed() {
@@ -104,25 +82,20 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:test.db", migrations)
-                .build(),
-        )
         .plugin(tauri_plugin_positioner::init())
         .setup(move |app| {
             let tray_window = Arc::new(app.app_handle().get_webview_window("tray-window").unwrap());
-            tray_window.hide();
+            let _ = tray_window.hide();
             let win_clone = tray_window.clone();
             tray_window.on_window_event(move |event| match event {
                 WindowEvent::Focused(false) => {
-                    win_clone.hide();
+                    let _ = win_clone.hide();
                 }
                 _ => {}
             });
 
             let app_window = app.app_handle().get_webview_window("app-window").unwrap();
-            app_window.show();
+            let _ = app_window.show();
             TrayIconBuilder::with_id("my-tray")
                 .icon(Image::from_path("./icons/icon.png")?)
                 .on_tray_icon_event(|app, event| {
@@ -151,6 +124,10 @@ pub fn run() {
             let handle = app.handle();
 
             let data_directory = handle.path().app_data_dir().unwrap();
+            let data_directory_clone = data_directory.clone();
+            let data_dir_str = data_directory_clone
+                .to_str()
+                .expect("failed to convert data dir to string");
 
             let recording_state = RecordingState {
                 media_process: None,
@@ -162,6 +139,16 @@ pub fn run() {
 
             app.manage(Arc::new(tauri::async_runtime::Mutex::new(recording_state)));
 
+            let db_url = "sqlite://".to_string() + data_dir_str + "/db.sqlite?mode=rwc";
+
+            let db = async_runtime::block_on(Database::connect(db_url))
+                .expect("Database connection failed");
+
+            async_runtime::block_on(Migrator::up(&db, None)).unwrap();
+
+            let state = AppState { db };
+
+            app.manage(state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -173,6 +160,10 @@ pub fn run() {
             enumerate_audio_input_devices,
             enumerate_audio_output_devices,
             set_target_output_device,
+            get_conversation,
+            get_conversations,
+            create_conversation,
+            delete_conversation
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     fs::{read_dir, read_to_string, File},
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -29,7 +29,7 @@ pub async fn transcribe(
     state: State<'_, Arc<Mutex<RecordingState>>>,
     conversation_id: u64,
 ) -> Result<Vec<String>, String> {
-    let mut guard: tokio::sync::MutexGuard<RecordingState> = state.lock().await;
+    let guard: tokio::sync::MutexGuard<RecordingState> = state.lock().await;
     let data_dir = guard.data_dir.clone();
     let recording_dir = data_dir
         .expect("no data directory")
