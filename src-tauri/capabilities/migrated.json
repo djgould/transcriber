@@ -26,6 +26,7 @@
     "fs:allow-app-write-recursive",
     "fs:allow-appcache-write",
     "fs:allow-appcache-write-recursive",
-    "positioner:default"
+    "positioner:default",
+    "notification:default"
   ]
 }

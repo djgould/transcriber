@@ -50,5 +50,5 @@ sea-orm-cli migrate fresh
 ```bash
 rm -rf entity/src/*
 
-sea-orm-cli generate entity -o entity/src --lib --with-serde both
+sea-orm-cli generate entity -o entity/src --lib --with-serde both --serde-skip-deserializing-primary-key
 ```

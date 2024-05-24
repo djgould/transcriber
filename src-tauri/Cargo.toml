@@ -38,6 +38,8 @@ ollama-rs = { version = "0.1.9", features = ["stream"] }
 migration = { path = "./migration" }
 service = { path = "./service" }
 entity = { path = "./entity" }
+tauri-plugin-notification = "2.0.0-beta.5"
+mac-notification-sys = "0.6.1"
 
 [dependencies.tauri-plugin-sql]
 features = ["sqlite"]

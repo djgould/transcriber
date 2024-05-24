@@ -10,6 +10,10 @@ pub struct Model {
     #[serde(skip_deserializing)]
     pub id: i32,
     pub title: String,
+    #[serde(skip_deserializing)]
+    pub created_at: String,
+    #[serde(skip_deserializing)]
+    pub updated_at: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -2,12 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod device_listener;
 mod media;
 mod recorder;
 mod summarize;
 mod transcribe;
 mod utils;
 
+use coreaudio::audio_unit::macos_helpers::get_default_device_id;
 use ffmpeg_sidecar::command::ffmpeg_is_installed;
 use ffmpeg_sidecar::download::check_latest_version;
 use ffmpeg_sidecar::download::download_ffmpeg_package;
@@ -16,6 +18,9 @@ use ffmpeg_sidecar::download::unpack_ffmpeg;
 use ffmpeg_sidecar::error::Result as FfmpegResult;
 use ffmpeg_sidecar::paths::sidecar_dir;
 use ffmpeg_sidecar::version::ffmpeg_version;
+use mac_notification_sys::get_bundle_identifier_or_default;
+use mac_notification_sys::send_notification;
+use mac_notification_sys::set_application;
 use migration::Migrator;
 use migration::MigratorTrait;
 use service::sea_orm::Database;
@@ -27,11 +32,13 @@ use tauri::image::Image;
 use tauri::tray::ClickType;
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
+use tauri::State;
 use tauri::WindowEvent;
 use tauri_plugin_positioner::Position;
 use tauri_plugin_positioner::WindowExt;
 use transcribe::{get_complete_transcription, get_real_time_transcription};
 
+use crate::device_listener::ActiveListener;
 use crate::media::set_configurator_id;
 use commands::conversation::{
     create_conversation, delete_conversation, get_conversation, get_conversations,
@@ -48,6 +55,12 @@ struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = set_configurator_id();
+
+    let device_id = get_default_device_id(true).expect("Failed to get default device");
+    let (tx, mut rx) = tokio::sync::watch::channel(false);
+
+    let mut listener_pb = ActiveListener::new(device_id, tx);
+    listener_pb.register().expect("Failed to register listener");
 
     fn handle_ffmpeg_installation() -> FfmpegResult<()> {
         if ffmpeg_is_installed() {
@@ -79,7 +92,19 @@ pub fn run() {
 
     handle_ffmpeg_installation().expect("Failed to install FFmpeg");
 
+    let bundle = get_bundle_identifier_or_default("com.devgould.platy");
+    set_application(&bundle).unwrap();
+
+    send_notification(
+        "Danger",
+        Some("Will Robinson"),
+        "Run away as fast as you can",
+        None,
+    )
+    .expect("failed to send notification");
+
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_positioner::init())
@@ -129,15 +154,29 @@ pub fn run() {
                 .to_str()
                 .expect("failed to convert data dir to string");
 
-            let recording_state = RecordingState {
+            let recording_state = Arc::new(tauri::async_runtime::Mutex::new(RecordingState {
                 media_process: None,
                 recording_options: None,
                 shutdown_flag: Arc::new(AtomicBool::new(false)),
                 audio_uploading_finished: Arc::new(AtomicBool::new(false)),
                 data_dir: Some(data_directory),
-            };
+            }));
+            let recording_state_clone = recording_state.clone();
 
-            app.manage(Arc::new(tauri::async_runtime::Mutex::new(recording_state)));
+            app.manage(recording_state);
+
+            println!("Listening for microphone state changes...");
+
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    if *rx.borrow() {
+                        println!("Device is alive");
+                    } else {
+                        println!("Device is not alive");
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                }
+            });
 
             let db_url = "sqlite://".to_string() + data_dir_str + "/db.sqlite?mode=rwc";
 
@@ -149,6 +188,7 @@ pub fn run() {
             let state = AppState { db };
 
             app.manage(state);
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

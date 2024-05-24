@@ -1,7 +1,7 @@
 use byteorder::{ByteOrder, LittleEndian};
 use coreaudio::audio_unit::macos_helpers::{
-    audio_unit_from_device_id, get_audio_device_ids_for_scope,
-    get_audio_device_supports_scope, get_device_id_from_name, get_device_name,
+    audio_unit_from_device_id, get_audio_device_ids_for_scope, get_audio_device_supports_scope,
+    get_device_id_from_name, get_device_name,
 };
 use coreaudio::audio_unit::render_callback::{self, data};
 use coreaudio::audio_unit::{AudioUnit, Element, Scope};
@@ -13,17 +13,18 @@ use coreaudio::sys::{
 use coreaudio_sys::{
     kAudioDevicePropertyDeviceUID, kAudioHardwareNoError, kAudioHardwarePropertyDevices,
     kAudioHardwarePropertyTranslateUIDToBox, kAudioObjectPropertyIdentify,
-    kAudioObjectPropertyName, kAudioObjectUnknown, kCFAllocatorDefault, kCFStringEncodingUTF8, AudioObjectGetPropertyDataSize, AudioObjectPropertySelector,
-    AudioObjectSetPropertyData, CFRelease, CFStringCreateWithCString, CFStringRef, CFTypeRef,
+    kAudioObjectPropertyName, kAudioObjectUnknown, kCFAllocatorDefault, kCFStringEncodingUTF8,
+    AudioObjectGetPropertyDataSize, AudioObjectPropertySelector, AudioObjectSetPropertyData,
+    CFRelease, CFStringCreateWithCString, CFStringRef, CFTypeRef,
 };
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat};
 use std::ffi::{CStr, CString};
 use std::io::Error;
 use std::os::raw::{c_char, c_void};
-use std::path::{Path};
+use std::path::Path;
 use std::process::Stdio;
-use std::ptr::{null};
+use std::ptr::null;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,

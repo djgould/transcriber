@@ -25,6 +25,7 @@
     "@tauri-apps/api": "2.0.0-beta.11",
     "@tauri-apps/plugin-dialog": "2.0.0-beta.3",
     "@tauri-apps/plugin-fs": "2.0.0-beta.3",
+    "@tauri-apps/plugin-notification": "2.0.0-beta.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "extendable-media-recorder": "^9.2.4",

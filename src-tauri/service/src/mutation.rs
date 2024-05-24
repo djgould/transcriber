@@ -1,4 +1,5 @@
 use ::entity::{conversation, conversation::Entity as Conversation};
+use chrono::Utc;
 use sea_orm::*;
 
 pub struct Mutation;
@@ -30,6 +31,8 @@ impl Mutation {
         conversation::ActiveModel {
             id: post.id,
             title: Set(form_data.title.to_owned()),
+            created_at: post.created_at,
+            updated_at: Set(Utc::now().to_string()),
         }
         .update(db)
         .await

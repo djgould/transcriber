@@ -56,6 +56,9 @@ importers:
       '@tauri-apps/plugin-fs':
         specifier: 2.0.0-beta.3
         version: 2.0.0-beta.3
+      '@tauri-apps/plugin-notification':
+        specifier: 2.0.0-beta.3
+        version: 2.0.0-beta.3
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.0
@@ -825,6 +828,9 @@ packages:
 
   '@tauri-apps/plugin-fs@2.0.0-beta.3':
     resolution: {integrity: sha512-LBgA7S10NwcitHaugIfmCSkewz45vSz1VOpMHhzvE38i1r1KpuTSHlr3MZ0LLq93tH/lvhYZ+3LAml4Sriwthw==}
+
+  '@tauri-apps/plugin-notification@2.0.0-beta.3':
+    resolution: {integrity: sha512-OCwvX10JrOgJh50HXIGD9EHgGUMtdYAZ+Q5peGCSS3/aA8XWL1GOENtC7CNb0P+W7HjRAj2N8jtEApgV0kD6Gg==}
 
   '@tauri-apps/plugin-sql@https://codeload.github.com/tauri-apps/tauri-plugin-sql/tar.gz/c1d5048c19bbfa998fd51f089be4c5a1a28138a2':
     resolution: {tarball: https://codeload.github.com/tauri-apps/tauri-plugin-sql/tar.gz/c1d5048c19bbfa998fd51f089be4c5a1a28138a2}
@@ -3090,6 +3096,10 @@ snapshots:
       '@tauri-apps/api': 2.0.0-beta.11
 
   '@tauri-apps/plugin-fs@2.0.0-beta.3':
+    dependencies:
+      '@tauri-apps/api': 2.0.0-beta.11
+
+  '@tauri-apps/plugin-notification@2.0.0-beta.3':
     dependencies:
       '@tauri-apps/api': 2.0.0-beta.11
 
