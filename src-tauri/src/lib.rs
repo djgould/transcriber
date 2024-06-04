@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod audio;
 mod commands;
 mod device_listener;
 mod media;
@@ -9,7 +10,19 @@ mod summarize;
 mod transcribe;
 mod utils;
 
-use coreaudio::audio_unit::macos_helpers::get_default_device_id;
+use audio::macos::aggregate_device::{
+    self, create_input_aggregate_device, create_output_aggregate_device,
+};
+use audio::macos::helpers::{all_device_uids, check_device_exists, get_device_uid};
+use core_foundation::base::TCFType;
+use core_foundation::string::CFString;
+use coreaudio::audio_unit::macos_helpers::{get_default_device_id, get_device_name};
+use coreaudio_sys::{
+    AudioBufferList, AudioDeviceCreateIOProcID, AudioDeviceID, AudioDeviceIOProc,
+    AudioDeviceIOProcID, AudioDeviceStart, AudioObjectID, AudioTimeStamp, OSStatus,
+};
+use entity::conversation::Model;
+use entity::conversation::{self, Model as ConversationModel};
 use ffmpeg_sidecar::command::ffmpeg_is_installed;
 use ffmpeg_sidecar::download::check_latest_version;
 use ffmpeg_sidecar::download::download_ffmpeg_package;
@@ -18,13 +31,18 @@ use ffmpeg_sidecar::download::unpack_ffmpeg;
 use ffmpeg_sidecar::error::Result as FfmpegResult;
 use ffmpeg_sidecar::paths::sidecar_dir;
 use ffmpeg_sidecar::version::ffmpeg_version;
+use libc::{c_char, c_int, c_void, dlopen, dlsym, RTLD_NOW};
 use mac_notification_sys::get_bundle_identifier_or_default;
 use mac_notification_sys::send_notification;
 use mac_notification_sys::set_application;
 use migration::Migrator;
 use migration::MigratorTrait;
-use service::sea_orm::Database;
-use service::sea_orm::DatabaseConnection;
+use objc::runtime::BOOL;
+use service::sea_orm::{Database, TryIntoModel};
+use service::sea_orm::{DatabaseConnection, Set};
+use service::Mutation;
+use std::ffi::CString;
+use std::ptr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tauri::async_runtime;
@@ -36,31 +54,47 @@ use tauri::State;
 use tauri::WindowEvent;
 use tauri_plugin_positioner::Position;
 use tauri_plugin_positioner::WindowExt;
+use tokio::sync::watch::Sender;
 use transcribe::{get_complete_transcription, get_real_time_transcription};
 
 use crate::device_listener::ActiveListener;
 use crate::media::set_configurator_id;
-use commands::conversation::{
-    create_conversation, delete_conversation, get_conversation, get_conversations,
+use crate::recorder::{RecordingOptions, _start_recording, _stop_recording};
+use commands::{
+    conversation::{
+        create_conversation, delete_conversation, get_conversation, get_conversations,
+        get_summary_for_converstation,
+    },
+    devices::{
+        enumerate_audio_input_devices, enumerate_audio_output_devices, set_input_device_name,
+        set_output_device_name,
+    },
 };
-use media::{
-    enumerate_audio_input_devices, enumerate_audio_output_devices, set_target_output_device,
-};
+use media::set_target_output_device;
 use recorder::{delete_recording_data, start_recording, stop_recording, RecordingState};
 #[derive(Clone)]
 struct AppState {
     db: DatabaseConnection,
 }
 
+struct DeviceState {
+    active_listener: ActiveListener,
+    selected_input_name: Option<String>,
+    selected_output_name: Option<String>,
+    aggregate_device_id: Option<AudioDeviceID>,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let _ = set_configurator_id();
-
     let device_id = get_default_device_id(true).expect("Failed to get default device");
-    let (tx, mut rx) = tokio::sync::watch::channel(false);
+    let default_output_device_id =
+        get_default_device_id(false).expect("Failed to get the default output device");
+    let default_input_name =
+        get_device_name(device_id).expect("Failed to get the default device name");
+    let default_output_name =
+        get_device_name(default_output_device_id).expect("Failed to get the default device name");
 
-    let mut listener_pb = ActiveListener::new(device_id, tx);
-    listener_pb.register().expect("Failed to register listener");
+    let (tx, mut rx) = tokio::sync::watch::channel(false);
 
     fn handle_ffmpeg_installation() -> FfmpegResult<()> {
         if ffmpeg_is_installed() {
@@ -92,19 +126,23 @@ pub fn run() {
 
     handle_ffmpeg_installation().expect("Failed to install FFmpeg");
 
-    let bundle = get_bundle_identifier_or_default("com.devgould.platy");
-    set_application(&bundle).unwrap();
+    let input_device_id = get_default_device_id(true).expect("failed to get default input");
+    let device_id = get_default_device_id(false).expect("failed to get default device");
+    let device_uid = get_device_uid(device_id).expect("failed to get device uid");
+    let aggregate_device_result =
+        create_output_aggregate_device(&device_uid, "Platy Speaker", "platy-speaker-1")
+            .expect("failed to create aggregate device");
 
-    send_notification(
-        "Danger",
-        Some("Will Robinson"),
-        "Run away as fast as you can",
-        None,
-    )
-    .expect("failed to send notification");
+    let device_exists = check_device_exists("Platy Microphone");
+    if !device_exists {
+        println!("Aggregate microphone device not found, creating one");
+        create_input_aggregate_device("BuiltInMicrophoneDevice")
+            .expect("failed to create aggregate device");
+    } else {
+        println!("Aggregate microphone already exists");
+    }
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_positioner::init())
@@ -149,6 +187,11 @@ pub fn run() {
             let handle = app.handle();
 
             let data_directory = handle.path().app_data_dir().unwrap();
+
+            if !data_directory.exists() {
+                println!("data dir doesn't exist");
+            }
+
             let data_directory_clone = data_directory.clone();
             let data_dir_str = data_directory_clone
                 .to_str()
@@ -160,35 +203,124 @@ pub fn run() {
                 shutdown_flag: Arc::new(AtomicBool::new(false)),
                 audio_uploading_finished: Arc::new(AtomicBool::new(false)),
                 data_dir: Some(data_directory),
+                conversation_id: None,
             }));
-            let recording_state_clone = recording_state.clone();
+            // let recording_state_clone = recording_state.clone();
 
             app.manage(recording_state);
 
-            println!("Listening for microphone state changes...");
-
-            tauri::async_runtime::spawn(async move {
-                loop {
-                    if *rx.borrow() {
-                        println!("Device is alive");
-                    } else {
-                        println!("Device is not alive");
-                    }
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                }
-            });
-
             let db_url = "sqlite://".to_string() + data_dir_str + "/db.sqlite?mode=rwc";
-
             let db = async_runtime::block_on(Database::connect(db_url))
                 .expect("Database connection failed");
 
             async_runtime::block_on(Migrator::up(&db, None)).unwrap();
 
             let state = AppState { db };
-
             app.manage(state);
 
+            let mut listener = ActiveListener::new(tx);
+            // listener
+            //     .register(device_id)
+            //     .expect("Failed to register listener");
+
+            let device_state = DeviceState {
+                selected_input_name: Some(default_input_name),
+                selected_output_name: Some(default_output_name),
+                active_listener: listener,
+                aggregate_device_id: Some(aggregate_device_result.aggregate_device_id),
+            };
+            app.manage(Arc::new(tauri::async_runtime::Mutex::new(device_state)));
+
+            let _app_handle = app.handle().clone();
+
+            // println!("Listening for microphone state changes...");
+            // tauri::async_runtime::spawn(async move {
+            //     loop {
+            //         match async {
+            //             if *rx.borrow() {
+            //                 let app_state: tauri::State<AppState> = _app_handle.state();
+            //                 let recording_state: tauri::State<
+            //                     Arc<tauri::async_runtime::Mutex<RecordingState>>,
+            //                 > = _app_handle.state();
+            //                 let recording_state_clone = recording_state.clone();
+            //                 let should_start_recording = {
+            //                     let recording_guard = recording_state.lock().await;
+            //                     if recording_guard.media_process.is_some() {
+            //                         false
+            //                     } else {
+            //                         true
+            //                     }
+            //                 };
+
+            //                 let _ = &app_state.db;
+
+            //                 if should_start_recording {
+            //                     println!("Device is alive, starting recording");
+            //                     let conversation = Mutation::create_conversation(
+            //                         &app_state.db,
+            //                         entity::conversation::Model {
+            //                             title: "bla".to_string(),
+            //                             id: 0,
+            //                             created_at: String::new(),
+            //                             updated_at: String::new(),
+            //                         },
+            //                     )
+            //                     .await
+            //                     .expect("could not insert conversation")
+            //                     .try_into_model()
+            //                     .expect("could not turn active model into model");
+            //                     let _ = _start_recording(
+            //                         recording_state_clone,
+            //                         RecordingOptions {
+            //                             user_id: "devin".to_string(),
+            //                             audio_input_name: "default".to_string(),
+            //                             audio_output_name: "default".to_string(),
+            //                         },
+            //                         conversation.id.try_into().unwrap(),
+            //                     )
+            //                     .await;
+            //                 } else {
+            //                     println!("Device is alive, recording running");
+            //                 };
+            //             } else {
+            //                 let app_state: tauri::State<AppState> = _app_handle.state();
+            //                 let recording_state: tauri::State<
+            //                     Arc<tauri::async_runtime::Mutex<RecordingState>>,
+            //                 > = _app_handle.state();
+            //                 let recording_state_clone = recording_state.clone();
+            //                 let should_stop_recording = {
+            //                     let recording_guard = recording_state.lock().await;
+            //                     if recording_guard.media_process.is_some() {
+            //                         true
+            //                     } else {
+            //                         false
+            //                     }
+            //                 };
+
+            //                 let _ = &app_state.db;
+
+            //                 if should_stop_recording {
+            //                     println!("Device is not alive, stopping recording");
+            //                     let _ = _stop_recording(recording_state_clone).await;
+            //                 } else {
+            //                     println!("Device is not alive, no recording running");
+            //                 };
+            //             }
+            //             Ok::<(), ()>(())
+            //         }
+            //         .await
+            //         {
+            //             Ok(_) => {}
+            //             Err(_) => {
+            //                 // Handle the error if necessary, or just log that something went wrong
+            //                 eprintln!("An error occurred in the loop iteration, but continuing...");
+            //             }
+            //         }
+            //         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            //     }
+            // });
+
+            println!("SETUP SUCCESS");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -203,7 +335,10 @@ pub fn run() {
             get_conversation,
             get_conversations,
             create_conversation,
-            delete_conversation
+            delete_conversation,
+            set_input_device_name,
+            set_output_device_name,
+            get_summary_for_converstation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,3 +1,4 @@
+use mac_notification_sys::{get_bundle_identifier_or_default, send_notification, set_application};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, ErrorKind, Write};
@@ -11,8 +12,9 @@ use tauri::async_runtime::Mutex;
 use tauri::State;
 use tokio::process::Command;
 
+use crate::commands::conversation;
 use crate::media::MediaRecorder;
-use crate::summarize::{generate_action_items, generate_title, summarize};
+use crate::summarize::{generate_action_items, generate_title, summarize, summarize_and_write};
 use crate::transcribe::{load_transcription, transcribe_wav_file_and_write};
 use crate::utils::ffmpeg_path_as_str;
 
@@ -22,6 +24,7 @@ pub struct RecordingState {
     pub shutdown_flag: Arc<AtomicBool>,
     pub audio_uploading_finished: Arc<AtomicBool>,
     pub data_dir: Option<PathBuf>,
+    pub conversation_id: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -31,13 +34,11 @@ pub struct RecordingOptions {
     pub audio_output_name: String,
 }
 
-#[tauri::command]
-pub async fn start_recording(
+pub async fn _start_recording(
     state: State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
     options: RecordingOptions,
-    conversation_id: u64,
+    conversation_id: u32,
 ) -> Result<(), String> {
-    println!("Starting screen recording...");
     let mut state_guard = state.lock().await;
 
     let shutdown_flag = Arc::new(AtomicBool::new(false));
@@ -49,6 +50,8 @@ pub async fn start_recording(
         .clone();
 
     println!("data_dir: {:?}", data_dir);
+
+    state_guard.conversation_id = Some(conversation_id);
 
     let audio_input_chunks_dir = data_dir
         .join("chunks/audio")
@@ -110,6 +113,15 @@ pub async fn start_recording(
     //     }
     // }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn start_recording(
+    state: State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+    options: RecordingOptions,
+    conversation_id: u32,
+) -> Result<(), String> {
+    _start_recording(state, options, conversation_id).await
 }
 use tokio::io::AsyncBufReadExt;
 
@@ -231,6 +243,80 @@ fn write_concat_file(concat_file_path: &PathBuf, segment_files: &Vec<String>) ->
     Ok(())
 }
 
+pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Result<(), String> {
+    let mut guard: tokio::sync::MutexGuard<RecordingState> = state.lock().await;
+
+    println!("Stopping media recording...");
+
+    guard.shutdown_flag.store(true, Ordering::SeqCst);
+
+    let conversation_id = guard
+        .conversation_id
+        .expect("Failed to stop recording, no conversation_id in state");
+
+    if let Some(mut media_process) = guard.media_process.take() {
+        println!("Stopping media recording...");
+        media_process
+            .stop_media_recording()
+            .await
+            .expect("Failed to stop media recording");
+    }
+
+    // let is_local_mode = match dotenv_codegen::dotenv!("NEXT_PUBLIC_LOCAL_MODE") {
+    //     "true" => true,
+    //     _ => false,
+    // };
+
+    // if !is_local_mode {
+    //     while !guard.audio_uploading_finished.load(Ordering::SeqCst) {
+    //         println!("Waiting for uploads to finish...");
+    //         tokio::time::sleep(Duration::from_millis(50)).await;
+    //     }
+    // }
+
+    // while !guard.audio_uploading_finished.load(Ordering::SeqCst) {
+    //     println!("Waiting for uploads to finish...");
+    //     tokio::time::sleep(Duration::from_millis(50)).await;
+    // }
+
+    let data_dir = guard.data_dir.clone();
+    let recording_dir = data_dir
+        .expect("no data directory")
+        .join("chunks/audio")
+        .join(conversation_id.to_string());
+    let input_dir = recording_dir.join("input");
+    let output_dir = recording_dir.join("output");
+    concat_segments(&input_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    concat_segments(&output_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    combine_segments(&recording_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    println!("combined segments..");
+
+    let combined_audio_file = recording_dir.join("combined.wav");
+    let transcription_output_file = recording_dir.join("transcription.json");
+    transcribe_wav_file_and_write(&combined_audio_file, &transcription_output_file)
+        .map_err(|e| e.to_string())?;
+    let transcription = load_transcription(transcription_output_file)
+        .await
+        .expect("Failed to load transcription");
+    let summary = summarize(&transcription.full_text.join(" CHANGE_SPEAKER_TOKEN "))
+        .await
+        .expect("Couldn't generate summary");
+    println!("summary: {}", summary);
+    let action_items = generate_action_items(&summary);
+    let title = generate_title(&summary);
+    println!("All recordings and uploads stopped.");
+
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn stop_recording(
     state: State<'_, Arc<Mutex<RecordingState>>>,
@@ -289,16 +375,21 @@ pub async fn stop_recording(
 
     let combined_audio_file = recording_dir.join("combined.wav");
     let transcription_output_file = recording_dir.join("transcription.json");
+    let summary_output_file = recording_dir.join("summary.json");
     transcribe_wav_file_and_write(&combined_audio_file, &transcription_output_file)
         .map_err(|e| e.to_string())?;
     let transcription = load_transcription(transcription_output_file)
         .await
         .expect("Failed to load transcription");
-    let summary = summarize(transcription.full_text.join(" CHANGE_SPEAKER_TOKEN "))
-        .await
-        .expect("Couldn't generate summary");
-    let action_items = generate_action_items(&summary);
-    let title = generate_title(&summary);
+    summarize_and_write(
+        transcription.full_text.join(" CHANGE_SPEAKER_TOKEN "),
+        &summary_output_file,
+    )
+    .await
+    .expect("Couldn't generate summary");
+
+    // let action_items = generate_action_items(&summary);
+    // let title = generate_title(&summary);
     println!("All recordings and uploads stopped.");
 
     Ok(())

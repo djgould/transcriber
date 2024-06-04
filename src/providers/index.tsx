@@ -2,11 +2,10 @@
 
 // We can not useState or useRef in a server component, which is why we are
 // extracting this part out into it's own file with 'use client' on top
-import { useState } from "react";
+import { PropsWithChildren, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "./ThemeProvider";
-import { AudioDeviceContextProvider } from "@/context/AudioDeviceContext";
 import { ConfigurationProvider } from "./ConfigurationProvider";
 import { Provider as JotaiProvider } from "jotai";
 import { ClientOnly } from "./ClientOnlyProvider";
@@ -39,7 +38,7 @@ function getQueryClient() {
   }
 }
 
-export default function Providers({ children }) {
+export default function Providers({ children }: PropsWithChildren) {
   // NOTE: Avoid useState when initializing the query client if you don't
   //       have a suspense boundary between this and the code that may
   //       suspend because React will throw away the client on the initial

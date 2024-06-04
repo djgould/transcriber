@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm generate",
+    "beforeBuildCommand": "pnpm build",
     "devUrl": "http://localhost:3000",
     "frontendDist": "../out"
   },
@@ -26,13 +26,13 @@
     },
     "longDescription": "",
     "macOS": {
-      "entitlements": null,
+      "entitlements": "App.entitlements",
       "exceptionDomain": "",
       "frameworks": [],
       "providerShortName": null,
       "signingIdentity": null
     },
-    "resources": [],
+    "resources": ["/Users/devingould/platy/src-tauri/src/models/ggml-small.en-tdrz.bin"],
     "shortDescription": "",
     "linux": {
       "deb": {
@@ -40,7 +40,7 @@
       }
     }
   },
-  "productName": "platy-backend",
+  "productName": "platy",
   "version": "0.1.0",
   "identifier": "com.devgould.platy",
   "plugins": {

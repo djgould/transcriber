@@ -15,7 +15,7 @@ import {
   selectedAudioInputDeviceAtom,
   selectedAudioOutputDeviceAtom,
 } from "@/atoms/audioDeviceAtom";
-import { useEffect, useState } from "react";
+import { ReactElement, useEffect, useState } from "react";
 import {
   useStartRecorderMutation,
   useStopRecorderMutation,
@@ -118,21 +118,26 @@ const Page: NextPageWithLayout = () => {
     <div className="p-2 h-screen flex flex-col gap-4">
       <Select
         value={selectedAudioInputDevice}
-        onValueChange={(value) => setSelectedAudioInputDevice(value)}
+        onValueChange={(value) => {
+          invoke("set_input_device_name", { name: value });
+          setSelectedAudioInputDevice(value);
+        }}
       >
         <SelectTrigger className="w-full">
           <SelectValue placeholder={selectedAudioInputDevice} />
         </SelectTrigger>
         <SelectContent>
           {audioInputDevices.data?.map((device) => (
-            <SelectItem value={device}>{device}</SelectItem>
+            <SelectItem value={device} key={device}>
+              {device}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
       <Select
         value={selectedAudioOutputDevice}
         onValueChange={(value) => {
-          invoke("set_target_output_device", { device: value });
+          invoke("set_output_device_name", { name: value });
           setSelectedAudioOutputDevice(value);
         }}
       >
@@ -141,7 +146,9 @@ const Page: NextPageWithLayout = () => {
         </SelectTrigger>
         <SelectContent>
           {audioOutputDevices.data?.map((device) => (
-            <SelectItem value={device}>{device}</SelectItem>
+            <SelectItem value={device} key={device}>
+              {device}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -180,7 +187,7 @@ const Page: NextPageWithLayout = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {conversations.data?.map((conversation) => (
+              {conversations.data?.map((conversation: any) => (
                 <TableRow key={conversation.id}>
                   <TableCell className="font-medium">
                     {new Date(conversation.created_at).toLocaleDateString()}

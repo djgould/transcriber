@@ -3657,6 +3657,9 @@ dependencies = [
  "llama_cpp",
  "mac-notification-sys",
  "migration",
+ "objc",
+ "objc-foundation",
+ "objc_id",
  "ollama-rs",
  "rubato",
  "serde",
@@ -3670,6 +3673,7 @@ dependencies = [
  "tauri-plugin-positioner",
  "tauri-plugin-sql",
  "tokio",
+ "uuid",
  "whisper-rs",
 ]
 

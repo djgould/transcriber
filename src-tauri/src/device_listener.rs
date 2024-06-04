@@ -5,7 +5,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use coreaudio::{audio_unit::macos_helpers::get_default_device_id, Error};
+use coreaudio::Error;
 use coreaudio_sys::{
     kAudioDevicePropertyDeviceIsRunningSomewhere, kAudioObjectPropertyElementMaster,
     kAudioObjectPropertyScopeGlobal, AudioDeviceID, AudioObjectAddPropertyListener,
@@ -13,12 +13,11 @@ use coreaudio_sys::{
     AudioObjectRemovePropertyListener, OSStatus,
 };
 use tokio::sync::watch;
-use tokio::time::{sleep, Duration};
 
 /// An ActiveListener is used to get notified when a device is disconnected.
 pub struct ActiveListener {
     alive: Box<AtomicBool>,
-    device_id: AudioDeviceID,
+    device_id: Option<AudioDeviceID>,
     property_address: AudioObjectPropertyAddress,
     alive_listener: Option<
         unsafe extern "C" fn(u32, u32, *const AudioObjectPropertyAddress, *mut c_void) -> i32,
@@ -35,7 +34,7 @@ impl Drop for ActiveListener {
 impl ActiveListener {
     /// Create a new ActiveListener for the given AudioDeviceID.
     /// The listener must be registered by calling `register()` in order to start receiving notifications.
-    pub fn new(device_id: AudioDeviceID, sender: watch::Sender<bool>) -> ActiveListener {
+    pub fn new(sender: watch::Sender<bool>) -> ActiveListener {
         // Add our listener callback.
         let property_address = AudioObjectPropertyAddress {
             mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
@@ -44,7 +43,7 @@ impl ActiveListener {
         };
         ActiveListener {
             alive: Box::new(AtomicBool::new(false)),
-            device_id,
+            device_id: None,
             property_address,
             alive_listener: None,
             sender,
@@ -52,7 +51,10 @@ impl ActiveListener {
     }
 
     /// Register this listener to receive notifications.
-    pub fn register(&mut self) -> Result<(), Error> {
+    pub fn register(&mut self, device_id: AudioDeviceID) -> Result<(), Error> {
+        self.device_id = Some(device_id);
+        println!("Registering device listener: {:?}", self.device_id);
+
         unsafe extern "C" fn alive_listener(
             device_id: AudioObjectID,
             _n_addresses: u32,
@@ -83,7 +85,8 @@ impl ActiveListener {
         // Add our listener callback.
         let status = unsafe {
             AudioObjectAddPropertyListener(
-                self.device_id,
+                self.device_id
+                    .expect("Couldn't register listener, device_id not found"),
                 &self.property_address as *const _,
                 Some(alive_listener),
                 self as *const _ as *mut _,
@@ -97,9 +100,11 @@ impl ActiveListener {
     /// Unregister this listener to stop receiving notifications
     pub fn unregister(&mut self) -> Result<(), Error> {
         if self.alive_listener.is_some() {
+            println!("Unregistering device listener: {:?}", self.device_id);
             let status = unsafe {
                 AudioObjectRemovePropertyListener(
-                    self.device_id,
+                    self.device_id
+                        .expect("Couldn't unregister listener, device id not found"),
                     &self.property_address as *const _,
                     self.alive_listener,
                     self as *const _ as *mut _,

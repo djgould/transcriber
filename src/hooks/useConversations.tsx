@@ -14,7 +14,7 @@ export const useConversation = (conversationId: number) => {
     queryFn: async () => {
       const conversation = invoke("get_conversation", { conversationId });
 
-      return conversation;
+      return conversation as any;
     },
   });
 
@@ -28,7 +28,7 @@ export const useConversations = () => {
     queryFn: async () => {
       const conversations = await invoke("get_conversations");
       console.log(conversations);
-      return conversations;
+      return conversations as any;
     },
   });
 
@@ -44,7 +44,7 @@ export const useCreateConversationMutation = () => {
       const conversation = await invoke("create_conversation", {
         form: { title: "the title" },
       });
-      return conversation;
+      return conversation as any;
     },
     onError(error) {
       console.log(error);
@@ -75,12 +75,12 @@ export const useDeleteConversationMutation = () => {
 
   const deleteConversationMutation = useMutation({
     mutationFn: async ({ conversationId }: { conversationId: number }) => {
-      return invoke("delete_conversation", { conversationId });
+      return invoke("delete_conversation", { conversationId }) as any;
     },
     onError(error) {
       toast({
         title: "Error Deleting Conversation",
-        description: error,
+        description: error.message,
       });
     },
     onSuccess: () => {
@@ -93,4 +93,15 @@ export const useDeleteConversationMutation = () => {
   });
 
   return deleteConversationMutation;
+};
+
+export const useConverstaionSummary = (conversationId: number) => {
+  const useConversationQuery = useQuery({
+    queryKey: ["conversations", conversationId, "summary"],
+    queryFn: async (): Promise<{ result: string; action_items: string }> => {
+      return invoke("get_summary_for_converstation", { conversationId });
+    },
+  });
+
+  return useConversationQuery;
 };

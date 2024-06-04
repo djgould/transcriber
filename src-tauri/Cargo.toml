@@ -30,7 +30,7 @@ coreaudio-rs = "0.12.0"
 bindgen = "0.69.4"
 core-foundation = "0.9.4"
 core-foundation-sys = "0.8.3"
-coreaudio-sys = "0.2.15"
+coreaudio-sys = { version = "0.2.15", features = ["core_audio"] }
 libc = "0.2.155"
 tauri-plugin-positioner = { version = "2.0.0-beta", features = ["tray-icon"] }
 llama_cpp = "0.3.2"
@@ -40,6 +40,10 @@ service = { path = "./service" }
 entity = { path = "./entity" }
 tauri-plugin-notification = "2.0.0-beta.5"
 mac-notification-sys = "0.6.1"
+objc = "0.2.7"
+objc-foundation = "0.1.1"
+objc_id = "0.1.1"
+uuid = "1.8.0"
 
 [dependencies.tauri-plugin-sql]
 features = ["sqlite"]

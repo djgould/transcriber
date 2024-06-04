@@ -159,7 +159,8 @@ impl MediaRecorder {
         if custom_output_device != Some("None") {
             println!("Building output stream...");
             println!("output_device {}", output_device.name().unwrap());
-            let device_id = audio_device_id_for_device_uid("Mirror_UID");
+            let device_id = get_device_id_from_name("Platy Speaker", false)
+                .expect("Failed to get device id from name");
             let result = build_coreaudio_audio_stream(
                 device_id,
                 44100.0,
@@ -465,6 +466,7 @@ impl MediaRecorder {
         ffmpeg_binary_path: &str,
         audio_ffmpeg_command: &[String],
     ) -> Result<(Child, ChildStdin), Error> {
+        println!("start_audio_ffmpeg_processes");
         let mut audio_process = start_recording_process(ffmpeg_binary_path, audio_ffmpeg_command)
             .await
             .map_err(|e| {
@@ -481,46 +483,7 @@ impl MediaRecorder {
     }
 }
 
-#[tauri::command]
-pub fn enumerate_audio_input_devices() -> Vec<String> {
-    let device_uid = "Mirror_UID"; // Replace with the actual UID of your hidden device
-
-    // Get the device ID from the UID
-    let device_id = audio_device_id_for_device_uid(device_uid);
-
-    for host in cpal::ALL_HOSTS {
-        println!("host {}", host.name());
-    }
-
-    let host = cpal::default_host();
-    let default_device = host
-        .default_input_device()
-        .expect("No default input device available");
-    let default_device_name = default_device
-        .name()
-        .expect("Failed to get default device name");
-
-    let devices = host.input_devices().expect("Failed to get devices");
-    println!("Logging devices");
-    let mut input_device_names: Vec<String> = devices
-        .filter_map(|device| {
-            println!("{}", device.name().unwrap());
-            let supported_input_configs = device.supported_input_configs();
-            if supported_input_configs.is_ok() && supported_input_configs.unwrap().count() > 0 {
-                device.name().ok()
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    input_device_names.retain(|name| name != &default_device_name);
-    input_device_names.insert(0, default_device_name);
-
-    input_device_names
-}
-
-fn audio_device_id_for_uid(
+pub fn audio_device_id_for_uid(
     device_uid: &str,
     selector: AudioObjectPropertySelector,
 ) -> AudioDeviceID {
@@ -776,23 +739,6 @@ pub fn set_configurator_id() -> Result<(), coreaudio::Error> {
             Ok(())
         }
     }
-}
-
-#[tauri::command]
-pub fn enumerate_audio_output_devices() -> Vec<String> {
-    let all_devices =
-        get_audio_device_ids_for_scope(Scope::Output).expect("failed to get device ids");
-    let output_devices: Vec<String> = all_devices
-        .into_iter()
-        .filter(|device| {
-            get_audio_device_supports_scope(*device, Scope::Output)
-                .expect("failed to see if device supports scope")
-        })
-        .map(|device| get_device_name(device).ok().unwrap())
-        .filter(|device_name| device_name != "Platy")
-        .collect();
-
-    output_devices
 }
 
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -1057,6 +1003,7 @@ async fn start_recording_process(
     ffmpeg_binary_path_str: &str,
     args: &[String],
 ) -> Result<tokio::process::Child, std::io::Error> {
+    println!("start_recording_process");
     let mut process = Command::new(ffmpeg_binary_path_str)
         .args(args)
         .stdin(Stdio::piped())

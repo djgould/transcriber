@@ -125,7 +125,7 @@ const Page: NextPageWithLayout = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {conversations.data?.map((conversation) => (
+              {conversations.data?.map((conversation: any) => (
                 <TableRow key={conversation.id}>
                   <TableCell className="font-medium">
                     {new Date(conversation.created_at).toLocaleDateString()}

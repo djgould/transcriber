@@ -1,10 +1,13 @@
+use std::fs::read_to_string;
+use std::sync::Arc;
+
 use entity::conversation::{self, Model as ConversationModel};
 use service::{
     sea_orm::{DeleteResult, TryIntoModel},
     Mutation, Query,
 };
 
-use crate::AppState;
+use crate::{recorder::RecordingState, summarize::SummaryJSON, AppState};
 
 #[tauri::command]
 pub async fn get_conversation(
@@ -71,4 +74,29 @@ pub async fn delete_conversation(
         .expect("could not delete conversation");
 
     Ok(result.rows_affected)
+}
+
+#[tauri::command]
+pub async fn get_summary_for_converstation(
+    state: tauri::State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+    conversation_id: i32,
+) -> Result<SummaryJSON, String> {
+    let state_guard = state.lock().await;
+    let data_dir = match &state_guard.data_dir {
+        Some(dir) => dir,
+        None => return Err("Data directory not set".to_string()),
+    };
+
+    let path = data_dir
+        .join("chunks/audio")
+        .join(conversation_id.to_string())
+        .join("summary.json");
+
+    let content = read_to_string(&path)
+        .map_err(|err| format!("Failed to read file {}: {}", path.display(), err))?;
+
+    let json_content: SummaryJSON = serde_json::from_str(&content)
+        .map_err(|err| format!("Failed to parse JSON in file {}: {}", path.display(), err))?;
+
+    Ok(json_content)
 }

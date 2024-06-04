@@ -117,7 +117,9 @@ export default function Page() {
         </SelectTrigger>
         <SelectContent>
           {audioInputDevices.data?.map((device) => (
-            <SelectItem value={device}>{device}</SelectItem>
+            <SelectItem value={device} key={device}>
+              {device}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -133,7 +135,9 @@ export default function Page() {
         </SelectTrigger>
         <SelectContent>
           {audioOutputDevices.data?.map((device) => (
-            <SelectItem value={device}>{device}</SelectItem>
+            <SelectItem value={device} key={device}>
+              {device}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -172,7 +176,7 @@ export default function Page() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {conversations.data?.map((conversation) => (
+              {conversations.data?.map((conversation: any) => (
                 <TableRow key={conversation.id}>
                   <TableCell className="font-medium">
                     {new Date(conversation.created_at).toLocaleDateString()}

@@ -3,7 +3,6 @@ import {
   selectedAudioOutputDeviceAtom,
 } from "@/atoms/audioDeviceAtom";
 import { useToast } from "@/components/ui/use-toast";
-import { useAudioDevice } from "@/context/AudioDeviceContext";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { useAtom } from "jotai";
@@ -50,7 +49,7 @@ export function useStartRecorderMutation() {
     onError: (error) => {
       toast({
         title: "Error",
-        description: error,
+        description: error.message,
       });
     },
   });
