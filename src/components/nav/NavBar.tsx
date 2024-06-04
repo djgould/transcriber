@@ -36,7 +36,7 @@ export default function NavBar() {
           </TooltipTrigger>
           <TooltipContent side="right">Dashboard</TooltipContent>
         </Tooltip>
-        <Tooltip>
+        {/* <Tooltip>
           <TooltipTrigger asChild>
             <Link
               href="#"
@@ -83,7 +83,7 @@ export default function NavBar() {
             </Link>
           </TooltipTrigger>
           <TooltipContent side="right">Analytics</TooltipContent>
-        </Tooltip>
+        </Tooltip> */}
       </nav>
       <nav className="mt-auto flex flex-col items-center gap-4 px-2 sm:py-5">
         <Tooltip>

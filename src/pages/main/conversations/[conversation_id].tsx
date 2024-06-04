@@ -16,7 +16,7 @@ import { useRouter } from "next/router";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompleteTranscription } from "@/hooks/useTranscription";
 import { MainLayout } from "@/components/layout/main";
-import { ReactElement } from "react";
+import { ReactElement, useState } from "react";
 import { NextPageWithLayout } from "@/pages/_app";
 import {
   Table,
@@ -30,8 +30,9 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { User } from "lucide-react";
+import { Check, Clipboard, User } from "lucide-react";
 import Markdown from "react-markdown";
+import copy from "copy-to-clipboard";
 
 const Page: NextPageWithLayout = () => {
   const {
@@ -44,6 +45,17 @@ const Page: NextPageWithLayout = () => {
   );
 
   const conversationSummary = useConverstaionSummary(Number(conversation_id));
+  const [copied, setCopied] = useState(false);
+
+  const copyTranscription = () => {
+    completeTranscription.data?.full_text &&
+      copy(completeTranscription.data?.full_text.join("\n"));
+    setCopied(true);
+
+    setTimeout(() => {
+      setCopied(false);
+    }, 3000);
+  };
 
   if (!conversation.data) {
     return (
@@ -64,33 +76,6 @@ const Page: NextPageWithLayout = () => {
   }
 
   const date = new Date(conversation?.data?.created_at);
-  const action_items = [
-    {
-      description:
-        "Explore reinforcement learning as a means to enable AI models to go beyond their current capabilities",
-      owner: "",
-    },
-    {
-      description:
-        "Investigate the use of self-play in AI models to develop creative moves",
-      owner: "",
-    },
-    {
-      description:
-        "Research the potential for neural networks to learn from poorly labeled data and make better decisions than their training data",
-      owner: "",
-    },
-    {
-      description:
-        "Develop approaches to add reasoning to AI models, such as adding heuristics on top of the model or allowing the model itself to develop reasoning as it scales up",
-      owner: "",
-    },
-    {
-      description:
-        "Experiment with multimodality (images, video, sound) to enable AI models to make analogies and understand spatial things",
-      owner: "",
-    },
-  ];
   const summary = conversationSummary.data?.result;
   return (
     <div className="p-2 h-screen flex flex-col gap-4">
@@ -110,7 +95,7 @@ const Page: NextPageWithLayout = () => {
               <h4 className="scroll-m-20 text-xl font-semibold tracking-tight">
                 Action Items
               </h4>
-              <div>
+              <div className="flex flex-col gap-4 py-4">
                 {conversationSummary.data?.action_items.map((actionItem) => (
                   <div
                     className="flex items-center space-x-2"
@@ -131,7 +116,14 @@ const Page: NextPageWithLayout = () => {
               </h4>
               <Markdown>{summary}</Markdown>
             </TabsContent>
-            <TabsContent value="password">
+            <TabsContent value="password" className="relative">
+              <Button
+                className="absolute -top-12 right-0"
+                variant="secondary"
+                onClick={copyTranscription}
+              >
+                {copied ? <Check /> : <Clipboard />}
+              </Button>
               <Table>
                 <TableBody>
                   {completeTranscription.data?.full_text.map(
