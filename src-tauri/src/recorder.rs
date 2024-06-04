@@ -310,8 +310,6 @@ pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Re
         .await
         .expect("Couldn't generate summary");
     println!("summary: {}", summary);
-    let action_items = generate_action_items(&summary);
-    let title = generate_title(&summary);
     println!("All recordings and uploads stopped.");
 
     Ok(())

@@ -98,7 +98,10 @@ export const useDeleteConversationMutation = () => {
 export const useConverstaionSummary = (conversationId: number) => {
   const useConversationQuery = useQuery({
     queryKey: ["conversations", conversationId, "summary"],
-    queryFn: async (): Promise<{ result: string; action_items: string }> => {
+    queryFn: async (): Promise<{
+      result: string;
+      action_items: { title: string }[];
+    }> => {
       return invoke("get_summary_for_converstation", { conversationId });
     },
   });

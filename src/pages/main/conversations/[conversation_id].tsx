@@ -110,23 +110,22 @@ const Page: NextPageWithLayout = () => {
               <h4 className="scroll-m-20 text-xl font-semibold tracking-tight">
                 Action Items
               </h4>
-              <Markdown>
-                {conversationSummary.data?.action_items}
-                {/* {action_items.map((actionItem) => (
+              <div>
+                {conversationSummary.data?.action_items.map((actionItem) => (
                   <div
                     className="flex items-center space-x-2"
-                    key={actionItem.description}
+                    key={actionItem.title}
                   >
                     <Checkbox id="terms" />
                     <label
                       htmlFor="terms"
                       className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                     >
-                      {actionItem.description}
+                      {actionItem.title}
                     </label>
                   </div>
-                ))} */}
-              </Markdown>
+                ))}
+              </div>
               <h4 className="scroll-m-20 text-xl font-semibold tracking-tight">
                 Summary
               </h4>
