@@ -9,6 +9,7 @@ use coreaudio_sys::{
     kAudioSubTapDriftCompensationKey, kAudioSubTapUIDKey, AudioHardwareCreateAggregateDevice,
     AudioObjectID, CFDictionaryRef,
 };
+use log::info;
 use objc_foundation::NSString;
 use objc_id::Id;
 use uuid::Uuid;
@@ -41,6 +42,7 @@ pub fn create_output_aggregate_device(
     aggregate_device_name: &str,
     aggregate_device_uid: &str,
 ) -> Result<CreateAggregateDeviceResult, coreaudio::Error> {
+    info!("Creating aggregate device..");
     let mut tap_description = CATapDescription::new_mono_global_tap_but_exclude(vec![]);
     let tap_id = audio_hardware_create_process_tap(&tap_description).expect("Failed to create tap");
 
@@ -56,7 +58,7 @@ pub fn create_output_aggregate_device(
 
     let tap_uuid_string = uuid_nsstring_to_cfstring(tap_description.get_uuid());
 
-    println!("tap_uuid_string {}", tap_uuid_string.to_string());
+    info!("tap_uuid_string {}", tap_uuid_string.to_string());
 
     let tap_device_dict = CFDictionary::from_CFType_pairs(&[
         (
@@ -118,7 +120,7 @@ pub fn create_output_aggregate_device(
     };
 
     if status == 0 {
-        println!(
+        info!(
             "Created aggregate device {} with tap {}",
             aggregate_device_id, tap_id
         );
@@ -127,7 +129,7 @@ pub fn create_output_aggregate_device(
             tap_id,
         })
     } else {
-        eprintln!(
+        info!(
             "AudioHardwareCreateAggregateDevice failed with status: {}",
             coreaudio::Error::from_os_status(status).unwrap_err()
         );
@@ -193,7 +195,7 @@ pub fn create_input_aggregate_device(input_uid: &str) -> Result<AudioObjectID, c
         if status == 0 {
             Ok(aggregate_device_id)
         } else {
-            eprintln!(
+            info!(
                 "AudioHardwareCreateAggregateDevice failed with status: {}",
                 status
             );

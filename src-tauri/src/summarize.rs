@@ -1,5 +1,6 @@
 use std::{fs::File, io::Write, path::PathBuf};
 
+use log::info;
 use ollama_rs::{
     generation::{completion::request::GenerationRequest, parameters::FormatType},
     Ollama,
@@ -105,7 +106,7 @@ pub async fn generate_action_items(text: &String) -> Result<ActionItems, String>
         .generate(generation_request)
         .await
         .expect("failed to generate action items");
-    println!("action items: {}", res.response);
+    info!("action items: {}", res.response);
     let json: ActionItems =
         serde_json::from_str(&res.response).expect("Action items not formatted correctly");
     Ok(json)

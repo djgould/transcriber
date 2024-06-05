@@ -19,6 +19,7 @@ use coreaudio_sys::{
 };
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat};
+use log::info;
 use std::ffi::{CStr, CString};
 use std::io::Error;
 use std::os::raw::{c_char, c_void};
@@ -142,8 +143,8 @@ impl MediaRecorder {
             .with_max_sample_rate();
 
         if custom_input_device != Some("None") {
-            println!("Building input stream...");
-            println!("input_device {}", input_device.name().unwrap());
+            info!("Building input stream...");
+            info!("input_device {}", input_device.name().unwrap());
             let stream_result: Result<cpal::Stream, cpal::BuildStreamError> = build_audio_stream(
                 &input_config,
                 &input_device,
@@ -157,8 +158,8 @@ impl MediaRecorder {
         }
 
         if custom_output_device != Some("None") {
-            println!("Building output stream...");
-            println!("output_device {}", output_device.name().unwrap());
+            info!("Building output stream...");
+            info!("output_device {}", output_device.name().unwrap());
             let device_id = get_device_id_from_name("Platy Speaker", false)
                 .expect("Failed to get device id from name");
             let result = build_coreaudio_audio_stream(
@@ -175,7 +176,7 @@ impl MediaRecorder {
             self.trigger_play_output()?;
         }
 
-        println!("Starting audio recording and processing...");
+        info!("Starting audio recording and processing...");
 
         let audio_input_file_path = audio_input_chunks_dir.to_str().unwrap();
         let audio_output_file_path = audio_output_chunks_dir.to_str().unwrap();
@@ -199,7 +200,7 @@ impl MediaRecorder {
             )
             .await?;
 
-        println!("created input recording process!");
+        info!("created input recording process!");
 
         self.ffmpeg_audio_input_process = input_process;
         let output_process = self
@@ -217,9 +218,9 @@ impl MediaRecorder {
 
         self.ffmpeg_audio_output_process = output_process;
 
-        println!("created output recording process!");
+        info!("created output recording process!");
 
-        println!("End of the start_audio_recording function");
+        info!("End of the start_audio_recording function");
 
         Ok(())
     }
@@ -245,13 +246,13 @@ impl MediaRecorder {
         //     _ => panic!("Unsupported sample format."),
         // };
 
-        println!("Sample rate: {}", sample_rate);
-        println!("Channels: {}", channels);
-        println!("Sample format: {}", sample_format);
+        info!("Sample rate: {}", sample_rate);
+        info!("Channels: {}", channels);
+        info!("Sample format: {}", sample_format);
 
         let ffmpeg_binary_path_str = ffmpeg_path_as_str().unwrap().to_owned();
 
-        println!("FFmpeg binary path: {}", ffmpeg_binary_path_str);
+        info!("FFmpeg binary path: {}", ffmpeg_binary_path_str);
 
         let audio_file_path_owned = audio_file_path.to_owned();
 
@@ -303,9 +304,9 @@ impl MediaRecorder {
         .map(|s| s.to_string())
         .collect();
 
-        println!("FFmpeg audio command: {:?}", ffmpeg_audio_command.join(" "));
+        info!("FFmpeg audio command: {:?}", ffmpeg_audio_command.join(" "));
 
-        println!("Starting FFmpeg audio process...");
+        info!("Starting FFmpeg audio process...");
 
         let mut audio_stdin: Option<ChildStdin> = None;
         let mut audio_child: Option<Child> = None;
@@ -317,18 +318,18 @@ impl MediaRecorder {
                 .map_err(|e| e.to_string())?;
             audio_child = Some(child);
             audio_stdin = Some(stdin);
-            println!("Audio input process started");
+            info!("Audio input process started");
         }
 
         if let Some(ffmpeg_audio_input_stdin) = &ffmpeg_audio_stdin {
             let mut audio_input_stdin_lock = ffmpeg_audio_input_stdin.lock().await;
             *audio_input_stdin_lock = audio_stdin;
             drop(audio_input_stdin_lock);
-            println!("Audio input stdin set");
+            info!("Audio input stdin set");
         }
 
         if custom_device != Some("None") {
-            println!("Starting audio channel receivers...");
+            info!("Starting audio channel receivers...");
             tokio::spawn(async move {
                 while let Some(bytes) = &audio_channel_receiver
                     .lock()
@@ -361,7 +362,7 @@ impl MediaRecorder {
     pub fn trigger_play_input(&mut self) -> Result<(), &'static str> {
         if let Some(ref mut stream) = self.input_stream {
             stream.play().map_err(|_| "Failed to play stream")?;
-            println!("Audio recording playing.");
+            info!("Audio recording playing.");
         } else {
             return Err("Starting the recording did not work");
         }
@@ -374,7 +375,7 @@ impl MediaRecorder {
             output_audio_unit
                 .start()
                 .map_err(|_| "Failed to play stream")?;
-            println!("Audio recording playing.");
+            info!("Audio recording playing.");
         } else {
             return Err("Starting the recording did not work");
         }
@@ -400,7 +401,7 @@ impl MediaRecorder {
                 let audio_segment_count = audio_segments.lines().count();
 
                 if audio_segment_count >= expected_segments as usize {
-                    println!("All segments generated");
+                    info!("All segments generated");
                     break;
                 }
 
@@ -412,7 +413,7 @@ impl MediaRecorder {
             let mut audio_stdin_guard = ffmpeg_audio_stdin.lock().await;
             if let Some(mut audio_stdin) = audio_stdin_guard.take() {
                 if let Err(e) = audio_stdin.write_all(b"q\n").await {
-                    eprintln!("Failed to send 'q' to audio FFmpeg process: {}", e);
+                    info!("Failed to send 'q' to audio FFmpeg process: {}", e);
                 }
                 let _ = audio_stdin.shutdown().await.map_err(|e| e.to_string());
             }
@@ -422,7 +423,7 @@ impl MediaRecorder {
             let mut audio_stdin_guard = ffmpeg_audio_stdin.lock().await;
             if let Some(mut audio_stdin) = audio_stdin_guard.take() {
                 if let Err(e) = audio_stdin.write_all(b"q\n").await {
-                    eprintln!("Failed to send 'q' to audio FFmpeg process: {}", e);
+                    info!("Failed to send 'q' to audio FFmpeg process: {}", e);
                 }
                 let _ = audio_stdin.shutdown().await.map_err(|e| e.to_string());
             }
@@ -439,7 +440,7 @@ impl MediaRecorder {
 
         if let Some(ref mut stream) = self.input_stream {
             stream.pause().map_err(|_| "Failed to pause stream")?;
-            println!("Audio recording paused.");
+            info!("Audio recording paused.");
         } else {
             return Err("Original recording was not started".to_string());
         }
@@ -448,7 +449,7 @@ impl MediaRecorder {
             output_audio_unit
                 .stop()
                 .map_err(|_| "Failed to pause stream")?;
-            println!("Audio recording paused.");
+            info!("Audio recording paused.");
         } else {
             return Err("Original recording was not started".to_string());
         }
@@ -457,7 +458,7 @@ impl MediaRecorder {
             let _ = process.kill().await.map_err(|e| e.to_string());
         }
 
-        println!("Audio recording stopped.");
+        info!("Audio recording stopped.");
         Ok(())
     }
 
@@ -466,16 +467,16 @@ impl MediaRecorder {
         ffmpeg_binary_path: &str,
         audio_ffmpeg_command: &[String],
     ) -> Result<(Child, ChildStdin), Error> {
-        println!("start_audio_ffmpeg_processes");
+        info!("start_audio_ffmpeg_processes");
         let mut audio_process = start_recording_process(ffmpeg_binary_path, audio_ffmpeg_command)
             .await
             .map_err(|e| {
-                eprintln!("Failed to start audio recording process: {}", e);
+                info!("Failed to start audio recording process: {}", e);
                 std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
             })?;
 
         let audio_stdin = audio_process.stdin.take().ok_or_else(|| {
-            eprintln!("Failed to take audio stdin");
+            info!("Failed to take audio stdin");
             std::io::Error::new(std::io::ErrorKind::Other, "Failed to take audio stdin")
         })?;
 
@@ -494,13 +495,13 @@ pub fn audio_device_id_for_uid(
         mScope: coreaudio_sys::kAudioObjectPropertyScopeGlobal,
         mElement: coreaudio_sys::kAudioObjectPropertyElementMaster,
     };
-    println!("Property address: {:?}", property_address);
+    info!("Property address: {:?}", property_address);
     let uid = CString::new(device_uid).unwrap();
     let cf_uid = unsafe {
         CFStringCreateWithCString(kCFAllocatorDefault, uid.as_ptr(), kCFStringEncodingUTF8)
     };
-    println!("UID: {:?}", uid);
-    println!("CFString UID: {:?}", cf_uid);
+    info!("UID: {:?}", uid);
+    info!("CFString UID: {:?}", cf_uid);
     unsafe {
         let status = coreaudio_sys::AudioObjectGetPropertyData(
             coreaudio_sys::kAudioObjectSystemObject,
@@ -511,12 +512,12 @@ pub fn audio_device_id_for_uid(
             &mut device_id as *mut _ as *mut c_void,
         );
         if coreaudio::Error::from_os_status(status).is_err() {
-            eprintln!(
+            info!(
                 "Error translating UID to device ID: {}",
                 coreaudio::Error::from_os_status(status).unwrap_err()
             );
         } else {
-            println!("Successfully translated UID to device ID: {}", device_id);
+            info!("Successfully translated UID to device ID: {}", device_id);
         }
         CFRelease(cf_uid as CFTypeRef);
     }
@@ -624,12 +625,12 @@ fn all_audio_output_devices() -> Vec<AudioDeviceID> {
             devices.as_mut_ptr() as *mut _,
         );
         if coreaudio::Error::from_os_status(status).is_err() {
-            eprintln!(
+            info!(
                 "Error getting output devices: {}",
                 coreaudio::Error::from_os_status(status).unwrap_err()
             );
         } else {
-            println!("Successfully got output devices: {}", device_id);
+            info!("Successfully got output devices: {}", device_id);
         }
     }
 
@@ -666,12 +667,12 @@ fn set_object_name(
         );
 
         if coreaudio::Error::from_os_status(status).is_err() {
-            eprintln!(
+            info!(
                 "Error setting object name to device ID: {}",
                 coreaudio::Error::from_os_status(status).unwrap_err()
             );
         } else {
-            println!(
+            info!(
                 "Successfully set object name to device ID: {}",
                 box_device_id
             );
@@ -712,24 +713,24 @@ pub fn set_configurator_id() -> Result<(), coreaudio::Error> {
     let proxy_audio_box = audio_device_id_for_box_id("ProxyAudioBox_UID");
 
     if proxy_audio_box == kAudioObjectUnknown {
-        println!("Error: unable to find proxy audio device");
+        info!("Error: unable to find proxy audio device");
         // Expected situation if the device isn't installed; not an actual error
         return Ok(());
     }
 
     // Convert process id safely
     let process_id = process::id().try_into().map_err(|e| {
-        eprintln!("Error converting process ID: {:?}", e);
+        info!("Error converting process ID: {:?}", e);
         coreaudio::Error::from_os_status(-1).unwrap_err() // Replace with a more relevant error if available
     })?;
 
     match set_identify_value(proxy_audio_box, process_id) {
         Ok(_) => {
-            println!("Configurator ID set successfully");
+            info!("Configurator ID set successfully");
             Ok(())
         }
         Err(e) => {
-            eprintln!(
+            info!(
                 "Error: unable to set current process as configurator: {}",
                 e
             );
@@ -744,7 +745,7 @@ pub fn set_configurator_id() -> Result<(), coreaudio::Error> {
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 fn get_device(custom_device: Option<&str>, device_type: DeviceType) -> Device {
-    println!("Custom device: {:?}", custom_device);
+    info!("Custom device: {:?}", custom_device);
 
     let host = cpal::default_host();
     let all_devices = host.devices().expect("Failed to get devices");
@@ -783,7 +784,7 @@ fn get_device(custom_device: Option<&str>, device_type: DeviceType) -> Device {
             .expect("No default input device available")
     };
 
-    println!(
+    info!(
         "Using audio input device: {}",
         device.name().expect("Failed to get device name")
     );
@@ -797,7 +798,7 @@ fn build_audio_stream(
     audio_channel_sender: Option<mpsc::Sender<Vec<u8>>>,
 ) -> Result<cpal::Stream, cpal::BuildStreamError> {
     let err_fn = move |err| {
-        eprintln!("an error occurred on stream: {}", err);
+        info!("an error occurred on stream: {}", err);
     };
 
     let stream_result: Result<cpal::Stream, cpal::BuildStreamError> =
@@ -812,7 +813,7 @@ fn build_audio_stream(
                         let bytes = data.iter().map(|&sample| sample as u8).collect::<Vec<u8>>();
                         if let Some(sender) = &audio_channel_sender {
                             if sender.try_send(bytes).is_err() {
-                                eprintln!("Channel send error. Dropping data.");
+                                info!("Channel send error. Dropping data.");
                             }
                         }
 
@@ -820,7 +821,7 @@ fn build_audio_stream(
                             if start_time_option.is_none() {
                                 **start_time_option = Some(Instant::now());
 
-                                println!("Audio start time captured");
+                                info!("Audio start time captured");
                             }
                         }
                     }
@@ -839,7 +840,7 @@ fn build_audio_stream(
                         LittleEndian::write_i16_into(data, &mut bytes);
                         if let Some(sender) = &audio_channel_sender {
                             if sender.try_send(bytes).is_err() {
-                                eprintln!("Channel send error. Dropping data.");
+                                info!("Channel send error. Dropping data.");
                             }
                         }
 
@@ -847,7 +848,7 @@ fn build_audio_stream(
                             if start_time_option.is_none() {
                                 **start_time_option = Some(Instant::now());
 
-                                println!("Audio start time captured");
+                                info!("Audio start time captured");
                             }
                         }
                     }
@@ -866,7 +867,7 @@ fn build_audio_stream(
                         LittleEndian::write_i32_into(data, &mut bytes);
                         if let Some(sender) = &audio_channel_sender {
                             if sender.try_send(bytes).is_err() {
-                                eprintln!("Channel send error. Dropping data.");
+                                info!("Channel send error. Dropping data.");
                             }
                         }
 
@@ -874,7 +875,7 @@ fn build_audio_stream(
                             if start_time_option.is_none() {
                                 **start_time_option = Some(Instant::now());
 
-                                println!("Audio start time captured");
+                                info!("Audio start time captured");
                             }
                         }
                     }
@@ -893,7 +894,7 @@ fn build_audio_stream(
                         LittleEndian::write_f32_into(data, &mut bytes);
                         if let Some(sender) = &audio_channel_sender {
                             if sender.try_send(bytes).is_err() {
-                                eprintln!("Channel send error. Dropping data.");
+                                info!("Channel send error. Dropping data.");
                             }
                         }
 
@@ -901,7 +902,7 @@ fn build_audio_stream(
                             if start_time_option.is_none() {
                                 **start_time_option = Some(Instant::now());
 
-                                println!("Audio start time captured");
+                                info!("Audio start time captured");
                             }
                         }
                     }
@@ -923,7 +924,7 @@ fn build_coreaudio_audio_stream(
     audio_start_time: Arc<Mutex<Option<Instant>>>,
     audio_channel_sender: Option<mpsc::Sender<Vec<u8>>>,
 ) -> Result<AudioUnit, coreaudio::Error> {
-    println!("Input device: {}", get_device_name(device_id).unwrap());
+    info!("Input device: {}", get_device_name(device_id).unwrap());
     let format_flag = match SAMPLE_FORMAT {
         coreaudio::audio_unit::SampleFormat::F32 => {
             coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_FLOAT
@@ -952,7 +953,7 @@ fn build_coreaudio_audio_stream(
         .contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_SIGNED_INTEGER);
     let is_packed =
         format_flag.contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_PACKED);
-    println!(
+    info!(
         "{} {} {} {} {}",
         !in_stream_format
             .flags
@@ -979,7 +980,7 @@ fn build_coreaudio_audio_stream(
             let mut bytes = vec![0; data.buffer.len() * 4];
             LittleEndian::write_f32_into(data.buffer, &mut bytes);
             if sender.try_send(bytes).is_err() {
-                eprintln!("Channel send error. Dropping data.");
+                info!("Channel send error. Dropping data.");
             }
         }
 
@@ -987,7 +988,7 @@ fn build_coreaudio_audio_stream(
             if start_time_option.is_none() {
                 **start_time_option = Some(Instant::now());
 
-                println!("Audio start time captured");
+                info!("Audio start time captured");
             }
         }
 
@@ -1003,7 +1004,7 @@ async fn start_recording_process(
     ffmpeg_binary_path_str: &str,
     args: &[String],
 ) -> Result<tokio::process::Child, std::io::Error> {
-    println!("start_recording_process");
+    info!("start_recording_process");
     let mut process = Command::new(ffmpeg_binary_path_str)
         .args(args)
         .stdin(Stdio::piped())
@@ -1014,7 +1015,7 @@ async fn start_recording_process(
         tokio::spawn(async move {
             let mut process_reader = BufReader::new(process_stderr).lines();
             while let Ok(Some(line)) = process_reader.next_line().await {
-                eprintln!("FFmpeg process STDERR: {}", line);
+                info!("FFmpeg process STDERR: {}", line);
             }
         });
     }

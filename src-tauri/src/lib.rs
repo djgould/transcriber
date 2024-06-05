@@ -30,6 +30,7 @@ use ffmpeg_sidecar::download::unpack_ffmpeg;
 use ffmpeg_sidecar::error::Result as FfmpegResult;
 use ffmpeg_sidecar::paths::sidecar_dir;
 use ffmpeg_sidecar::version::ffmpeg_version;
+use log::{error, info};
 use mac_notification_sys::get_bundle_identifier_or_default;
 use mac_notification_sys::set_application;
 use migration::Migrator;
@@ -45,6 +46,8 @@ use tauri::tray::ClickType;
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
 use tauri::WindowEvent;
+use tauri_plugin_log::{Target, TargetKind};
+// use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_positioner::Position;
 use tauri_plugin_positioner::WindowExt;
 use transcribe::{get_complete_transcription, get_real_time_transcription};
@@ -78,77 +81,87 @@ struct DeviceState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let device_id = get_default_device_id(true).expect("Failed to get default device");
-    let default_output_device_id =
-        get_default_device_id(false).expect("Failed to get the default output device");
-    let default_input_name =
-        get_device_name(device_id).expect("Failed to get the default device name");
-    let default_output_name =
-        get_device_name(default_output_device_id).expect("Failed to get the default device name");
-
     let (tx, mut rx) = tokio::sync::watch::channel(false);
 
-    fn handle_ffmpeg_installation() -> FfmpegResult<()> {
-        if ffmpeg_is_installed() {
-            println!("FFmpeg is already installed! 🎉");
-            return Ok(());
-        }
-
-        match check_latest_version() {
-            Ok(version) => println!("Latest available version: {}", version),
-            Err(_) => println!("Skipping version check on this platform."),
-        }
-
-        let download_url = ffmpeg_download_url()?;
-        let destination = sidecar_dir()?;
-
-        println!("Downloading from: {:?}", download_url);
-        let archive_path = download_ffmpeg_package(download_url, &destination)?;
-        println!("Downloaded package: {:?}", archive_path);
-
-        println!("Extracting...");
-        unpack_ffmpeg(&archive_path, &destination)?;
-
-        let version = ffmpeg_version()?;
-        println!("FFmpeg version: {}", version);
-
-        println!("Done! 🏁");
-        Ok(())
-    }
-
-    handle_ffmpeg_installation().expect("Failed to install FFmpeg");
-
-    let device_id = get_default_device_id(false).expect("failed to get default device");
-    let device_uid = get_device_uid(device_id).expect("failed to get device uid");
-    let aggregate_device_result =
-        create_output_aggregate_device(&device_uid, "Platy Speaker", "platy-speaker-1")
-            .expect("failed to create aggregate device");
-
-    let device_exists = check_device_exists("Platy Microphone");
-    if !device_exists {
-        println!("Aggregate microphone device not found, creating one");
-        create_input_aggregate_device("BuiltInMicrophoneDevice")
-            .expect("failed to create aggregate device");
-    } else {
-        println!("Aggregate microphone already exists");
-    }
-    let input_device_id =
-        get_device_id_from_name("Platy Microphone", true).expect("Platy Microphone doesn't exist");
-
-    // let bundle = get_bundle_identifier_or_default("com.devgould.platy");
-    // println!("bundle {}", bundle);
-    // set_application(&bundle).unwrap();
-
-    let mut listener = ActiveListener::new(tx);
-    listener
-        .register(input_device_id)
-        .expect("Failed to register listener");
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("Panicked: {:?}", info);
+        error!("Panicked: {:?}", info);
+    }));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_positioner::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                    Target::new(TargetKind::Webview),
+                ])
+                .build(),
+        )
         .setup(move |app| {
+            let device_id = get_default_device_id(true).expect("Failed to get default device");
+            let default_output_device_id =
+                get_default_device_id(false).expect("Failed to get the default output device");
+            let default_input_name =
+                get_device_name(device_id).expect("Failed to get the default device name");
+            let default_output_name = get_device_name(default_output_device_id)
+                .expect("Failed to get the default device name");
+
+            fn handle_ffmpeg_installation() -> FfmpegResult<()> {
+                if ffmpeg_is_installed() {
+                    info!("FFmpeg is already installed! 🎉");
+                    return Ok(());
+                }
+
+                match check_latest_version() {
+                    Ok(version) => info!("Latest available version: {}", version),
+                    Err(_) => info!("Skipping version check on this platform."),
+                }
+
+                let download_url = ffmpeg_download_url()?;
+                let destination = sidecar_dir()?;
+
+                info!("Downloading from: {:?}", download_url);
+                let archive_path = download_ffmpeg_package(download_url, &destination)?;
+                info!("Downloaded package: {:?}", archive_path);
+
+                info!("Extracting...");
+                unpack_ffmpeg(&archive_path, &destination)?;
+
+                let version = ffmpeg_version()?;
+                info!("FFmpeg version: {}", version);
+
+                info!("Done! 🏁");
+                Ok(())
+            }
+
+            handle_ffmpeg_installation().expect("Failed to install FFmpeg");
+
+            let device_id = get_default_device_id(false).expect("failed to get default device");
+            let device_uid = get_device_uid(device_id).expect("failed to get device uid");
+            let aggregate_device_result =
+                create_output_aggregate_device(&device_uid, "Platy Speaker", "platy-speaker-1")
+                    .expect("failed to create aggregate device");
+
+            let device_exists = check_device_exists("Platy Microphone");
+            if !device_exists {
+                info!("Aggregate microphone device not found, creating one");
+                create_input_aggregate_device("BuiltInMicrophoneDevice")
+                    .expect("failed to create aggregate device");
+            } else {
+                info!("Aggregate microphone already exists");
+            }
+            let input_device_id = get_device_id_from_name("Platy Microphone", true)
+                .expect("Platy Microphone doesn't exist");
+
+            let mut listener = ActiveListener::new(tx);
+            listener
+                .register(input_device_id)
+                .expect("Failed to register listener");
+
             let tray_window = Arc::new(app.app_handle().get_webview_window("tray-window").unwrap());
             let _ = tray_window.hide();
             let win_clone = tray_window.clone();
@@ -162,7 +175,7 @@ pub fn run() {
             let app_window = app.app_handle().get_webview_window("app-window").unwrap();
             let _ = app_window.show();
             TrayIconBuilder::with_id("my-tray")
-                .icon(Image::from_path("./icons/icon.png")?)
+                // .icon(Image::from_path("./icons/icon.ico")?)
                 .on_tray_icon_event(|app, event| {
                     tauri_plugin_positioner::on_tray_event(app.app_handle(), &event);
                     match event.click_type {
@@ -191,7 +204,7 @@ pub fn run() {
             let data_directory = handle.path().app_data_dir().unwrap();
 
             if !data_directory.exists() {
-                println!("data dir doesn't exist");
+                info!("data dir doesn't exist");
             }
 
             let data_directory_clone = data_directory.clone();
@@ -207,30 +220,29 @@ pub fn run() {
                 data_dir: Some(data_directory),
                 conversation_id: None,
             }));
-            // let recording_state_clone = recording_state.clone();
 
             app.manage(recording_state);
 
-            // let db_url = "sqlite://".to_string() + data_dir_str + "/db.sqlite?mode=rwc";
-            // let db = async_runtime::block_on(Database::connect(db_url))
-            //     .expect("Database connection failed");
+            let db_url = "sqlite://".to_string() + data_dir_str + "/db.sqlite?mode=rwc";
+            let db = async_runtime::block_on(Database::connect(db_url))
+                .expect("Database connection failed");
 
-            // async_runtime::block_on(Migrator::up(&db, None)).unwrap();
+            async_runtime::block_on(Migrator::up(&db, None)).unwrap();
 
-            // let state = AppState { db };
-            // app.manage(state);
+            let state = AppState { db };
+            app.manage(state);
 
-            // let device_state = DeviceState {
-            //     selected_input_name: Some(default_input_name),
-            //     selected_output_name: Some(default_output_name),
-            //     active_listener: listener,
-            //     aggregate_device_id: Some(aggregate_device_result.aggregate_device_id),
-            // };
-            // app.manage(Arc::new(tauri::async_runtime::Mutex::new(device_state)));
+            let device_state = DeviceState {
+                selected_input_name: Some(default_input_name),
+                selected_output_name: Some(default_output_name),
+                active_listener: listener,
+                aggregate_device_id: Some(aggregate_device_result.aggregate_device_id),
+            };
+            app.manage(Arc::new(tauri::async_runtime::Mutex::new(device_state)));
 
-            // let _app_handle = app.handle().clone();
+            let _app_handle = app.handle().clone();
 
-            // println!("Listening for microphone state changes...");
+            info!("Listening for microphone state changes...");
             // tauri::async_runtime::spawn(async move {
             //     loop {
             //         match async {
@@ -252,7 +264,7 @@ pub fn run() {
             //                 let _ = &app_state.db;
 
             //                 if should_start_recording {
-            //                     println!("Device is alive, starting recording");
+            //                     info!("Device is alive, starting recording");
             //                     let conversation = Mutation::create_conversation(
             //                         &app_state.db,
             //                         entity::conversation::Model {
@@ -277,14 +289,13 @@ pub fn run() {
             //                     )
             //                     .await;
             //                 } else {
-            //                     println!("Device is alive, recording running");
+            //                     info!("Device is alive, recording running");
             //                 };
             //             } else {
             //                 let app_state: tauri::State<AppState> = _app_handle.state();
             //                 let recording_state: tauri::State<
             //                     Arc<tauri::async_runtime::Mutex<RecordingState>>,
             //                 > = _app_handle.state();
-            //                 let recording_state_clone = recording_state.clone();
             //                 let should_stop_recording = {
             //                     let recording_guard = recording_state.lock().await;
             //                     if recording_guard.media_process.is_some() {
@@ -297,10 +308,10 @@ pub fn run() {
             //                 let _ = &app_state.db;
 
             //                 if should_stop_recording {
-            //                     println!("Device is not alive, stopping recording");
+            //                     info!("Device is not alive, stopping recording");
             //                     // let _ = _stop_recording(recording_state_clone).await;
             //                 } else {
-            //                     println!("Device is not alive, no recording running");
+            //                     info!("Device is not alive, no recording running");
             //                 };
             //             }
             //             Ok::<(), ()>(())
@@ -310,14 +321,14 @@ pub fn run() {
             //             Ok(_) => {}
             //             Err(_) => {
             //                 // Handle the error if necessary, or just log that something went wrong
-            //                 eprintln!("An error occurred in the loop iteration, but continuing...");
+            //                 info!("An error occurred in the loop iteration, but continuing...");
             //             }
             //         }
             //         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
             //     }
             // });
 
-            println!("SETUP SUCCESS");
+            info!("SETUP SUCCESS");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -1,3 +1,4 @@
+use log::info;
 use mac_notification_sys::{get_bundle_identifier_or_default, send_notification, set_application};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -50,7 +51,7 @@ pub async fn _start_recording(
         .ok_or("Data directory is not set in the recording state".to_string())?
         .clone();
 
-    println!("data_dir: {:?}", data_dir);
+    info!("data_dir: {:?}", data_dir);
 
     state_guard.conversation_id = Some(conversation_id);
 
@@ -101,7 +102,7 @@ pub async fn _start_recording(
 
     drop(state_guard);
 
-    println!("Starting upload loops...");
+    info!("Starting upload loops...");
 
     // match tokio::try_join!(audio_upload) {
     //     Ok(_) => {
@@ -140,7 +141,7 @@ async fn concat_segments(
                 .collect::<Vec<String>>(),
         ),
         Err(e) => {
-            eprintln!("Failed to read segment list: {}", e);
+            info!("Failed to read segment list: {}", e);
             None
         }
     }
@@ -148,7 +149,7 @@ async fn concat_segments(
 
     // Ensure there are segments to combine
     if segment_files.is_empty() {
-        eprintln!("No segments found to combine.");
+        info!("No segments found to combine.");
     }
 
     let concat_file_path = audio_chunks_dir.join("concat.txt").clone();
@@ -169,7 +170,7 @@ async fn concat_segments(
     ];
 
     // Print the generated args for debugging
-    println!("FFmpeg args: {:?}", args);
+    info!("FFmpeg args: {:?}", args);
 
     let mut process = Command::new(ffmpeg_binary_path_str).args(args).spawn()?;
 
@@ -179,7 +180,7 @@ async fn concat_segments(
 
             let mut process_reader = BufReader::new(process_stderr).lines();
             while let Ok(Some(line)) = process_reader.next_line().await {
-                eprintln!("FFmpeg process STDERR: {}", line);
+                info!("FFmpeg process STDERR: {}", line);
             }
         });
     }
@@ -213,7 +214,7 @@ async fn combine_segments(
     ];
 
     // Print the generated args for debugging
-    println!("FFmpeg args: {:?}", args);
+    info!("FFmpeg args: {:?}", args);
 
     let mut process = Command::new(ffmpeg_binary_path_str).args(args).spawn()?;
 
@@ -223,7 +224,7 @@ async fn combine_segments(
 
             let mut process_reader = BufReader::new(process_stderr).lines();
             while let Ok(Some(line)) = process_reader.next_line().await {
-                eprintln!("FFmpeg process STDERR: {}", line);
+                info!("FFmpeg process STDERR: {}", line);
             }
         });
     }
@@ -245,12 +246,12 @@ fn write_concat_file(concat_file_path: &PathBuf, segment_files: &Vec<String>) ->
 pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Result<(), String> {
     let mut guard: tokio::sync::MutexGuard<RecordingState> = state.lock().await;
 
-    println!("Stopping media recording...");
+    info!("Stopping media recording...");
 
     guard.shutdown_flag.store(true, Ordering::SeqCst);
 
     if let Some(mut media_process) = guard.media_process.take() {
-        println!("Stopping media recording...");
+        info!("Stopping media recording...");
         media_process
             .stop_media_recording()
             .await
@@ -296,7 +297,7 @@ pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Re
         .map_err(|e| e.to_string())?;
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    println!("combined segments..");
+    info!("combined segments..");
 
     let combined_audio_file = recording_dir.join("combined.wav");
     let transcription_output_file = recording_dir.join("transcription.json");
@@ -315,7 +316,7 @@ pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Re
 
     // let action_items = generate_action_items(&summary);
     // let title = generate_title(&summary);
-    println!("All recordings and uploads stopped.");
+    info!("All recordings and uploads stopped.");
 
     Ok(())
 }
