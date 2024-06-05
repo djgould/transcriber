@@ -72,43 +72,6 @@ const Page: NextPageWithLayout = () => {
   const createConversationMutation = useCreateConversationMutation();
   const deleteConversationMutation = useDeleteConversationMutation();
 
-  const startRecording = async () => {
-    createConversationMutation.mutate(undefined, {
-      onSuccess(conversation) {
-        setActiveRecordingInfo({
-          conversation_id: conversation.lastInsertId,
-          status: "recording",
-        });
-        startRecorderMutation.mutate(
-          {
-            conversation_id: conversation.lastInsertId,
-          },
-          {
-            onError: () => {
-              setActiveRecordingInfo(undefined);
-            },
-          }
-        );
-      },
-    });
-  };
-
-  const stopRecording = () => {
-    if (!activeRecordingInfo?.conversation_id) return;
-    setActiveRecordingInfo({
-      ...activeRecordingInfo,
-      status: "stopping",
-    });
-    stopRecorderMutation.mutate(
-      { conversation_id: activeRecordingInfo?.conversation_id },
-      {
-        onSuccess: () => {
-          setActiveRecordingInfo(undefined);
-        },
-      }
-    );
-  };
-
   return (
     <div className="p-2 h-screen flex flex-col gap-4">
       <Card>

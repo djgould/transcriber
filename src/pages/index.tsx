@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/table";
 import Link from "next/link";
 import { invoke } from "@tauri-apps/api/core";
+import { RecordingButton } from "@/components/recording/RecordingButton";
 
 export default function Page() {
   const audioInputDevices = useAudioInputDevicesQuery();
@@ -58,53 +59,9 @@ export default function Page() {
   const [selectedAudioOutputDevice, setSelectedAudioOutputDevice] = useAtom(
     selectedAudioOutputDeviceAtom
   );
-  const [activeRecordingInfo, setActiveRecordingInfo] = useState<
-    { conversation_id: number; status: "recording" | "stopping" } | undefined
-  >();
-
-  const startRecorderMutation = useStartRecorderMutation();
-  const stopRecorderMutation = useStopRecorderMutation();
 
   const conversations = useConversations();
-  const createConversationMutation = useCreateConversationMutation();
   const deleteConversationMutation = useDeleteConversationMutation();
-
-  const startRecording = async () => {
-    createConversationMutation.mutate(undefined, {
-      onSuccess(conversation) {
-        setActiveRecordingInfo({
-          conversation_id: conversation.lastInsertId,
-          status: "recording",
-        });
-        startRecorderMutation.mutate(
-          {
-            conversation_id: conversation.lastInsertId,
-          },
-          {
-            onError: () => {
-              setActiveRecordingInfo(undefined);
-            },
-          }
-        );
-      },
-    });
-  };
-
-  const stopRecording = () => {
-    if (!activeRecordingInfo?.conversation_id) return;
-    setActiveRecordingInfo({
-      ...activeRecordingInfo,
-      status: "stopping",
-    });
-    stopRecorderMutation.mutate(
-      { conversation_id: activeRecordingInfo?.conversation_id },
-      {
-        onSuccess: () => {
-          setActiveRecordingInfo(undefined);
-        },
-      }
-    );
-  };
 
   return (
     <div className="p-2 h-screen flex flex-col gap-4">
@@ -141,25 +98,7 @@ export default function Page() {
           ))}
         </SelectContent>
       </Select>
-      <Button
-        variant="outline"
-        disabled={activeRecordingInfo?.status === "stopping"}
-        onClick={() => {
-          if (activeRecordingInfo) {
-            stopRecording();
-          } else {
-            startRecording();
-          }
-        }}
-      >
-        {activeRecordingInfo?.status === "stopping" && (
-          <Loader className="animate-spin" />
-        )}
-        {activeRecordingInfo?.status === "recording" && (
-          <Circle className={clsx("text-red-800 fill-red-800 animate-pulse")} />
-        )}
-        {!activeRecordingInfo && <Circle className={clsx("text-red-800")} />}
-      </Button>
+      <RecordingButton />
       <Card>
         <CardHeader>
           <CardTitle className="text-lg text-center">

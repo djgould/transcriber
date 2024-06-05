@@ -135,9 +135,9 @@ pub fn run() {
     let input_device_id =
         get_device_id_from_name("Platy Microphone", true).expect("Platy Microphone doesn't exist");
 
-    let bundle = get_bundle_identifier_or_default("com.devgould.platy");
-    println!("bundle {}", bundle);
-    set_application(&bundle).unwrap();
+    // let bundle = get_bundle_identifier_or_default("com.devgould.platy");
+    // println!("bundle {}", bundle);
+    // set_application(&bundle).unwrap();
 
     let mut listener = ActiveListener::new(tx);
     listener
@@ -211,111 +211,111 @@ pub fn run() {
 
             app.manage(recording_state);
 
-            let db_url = "sqlite://".to_string() + data_dir_str + "/db.sqlite?mode=rwc";
-            let db = async_runtime::block_on(Database::connect(db_url))
-                .expect("Database connection failed");
+            // let db_url = "sqlite://".to_string() + data_dir_str + "/db.sqlite?mode=rwc";
+            // let db = async_runtime::block_on(Database::connect(db_url))
+            //     .expect("Database connection failed");
 
-            async_runtime::block_on(Migrator::up(&db, None)).unwrap();
+            // async_runtime::block_on(Migrator::up(&db, None)).unwrap();
 
-            let state = AppState { db };
-            app.manage(state);
+            // let state = AppState { db };
+            // app.manage(state);
 
-            let device_state = DeviceState {
-                selected_input_name: Some(default_input_name),
-                selected_output_name: Some(default_output_name),
-                active_listener: listener,
-                aggregate_device_id: Some(aggregate_device_result.aggregate_device_id),
-            };
-            app.manage(Arc::new(tauri::async_runtime::Mutex::new(device_state)));
+            // let device_state = DeviceState {
+            //     selected_input_name: Some(default_input_name),
+            //     selected_output_name: Some(default_output_name),
+            //     active_listener: listener,
+            //     aggregate_device_id: Some(aggregate_device_result.aggregate_device_id),
+            // };
+            // app.manage(Arc::new(tauri::async_runtime::Mutex::new(device_state)));
 
-            let _app_handle = app.handle().clone();
+            // let _app_handle = app.handle().clone();
 
-            println!("Listening for microphone state changes...");
-            tauri::async_runtime::spawn(async move {
-                loop {
-                    match async {
-                        if *rx.borrow() {
-                            let app_state: tauri::State<AppState> = _app_handle.state();
-                            let recording_state: tauri::State<
-                                Arc<tauri::async_runtime::Mutex<RecordingState>>,
-                            > = _app_handle.state();
-                            let recording_state_clone = recording_state.clone();
-                            let should_start_recording = {
-                                let recording_guard = recording_state.lock().await;
-                                if recording_guard.media_process.is_some() {
-                                    false
-                                } else {
-                                    true
-                                }
-                            };
+            // println!("Listening for microphone state changes...");
+            // tauri::async_runtime::spawn(async move {
+            //     loop {
+            //         match async {
+            //             if *rx.borrow() {
+            //                 let app_state: tauri::State<AppState> = _app_handle.state();
+            //                 let recording_state: tauri::State<
+            //                     Arc<tauri::async_runtime::Mutex<RecordingState>>,
+            //                 > = _app_handle.state();
+            //                 let recording_state_clone = recording_state.clone();
+            //                 let should_start_recording = {
+            //                     let recording_guard = recording_state.lock().await;
+            //                     if recording_guard.media_process.is_some() {
+            //                         false
+            //                     } else {
+            //                         true
+            //                     }
+            //                 };
 
-                            let _ = &app_state.db;
+            //                 let _ = &app_state.db;
 
-                            if should_start_recording {
-                                println!("Device is alive, starting recording");
-                                let conversation = Mutation::create_conversation(
-                                    &app_state.db,
-                                    entity::conversation::Model {
-                                        title: "bla".to_string(),
-                                        id: 0,
-                                        created_at: String::new(),
-                                        updated_at: String::new(),
-                                    },
-                                )
-                                .await
-                                .expect("could not insert conversation")
-                                .try_into_model()
-                                .expect("could not turn active model into model");
-                                let _ = _start_recording(
-                                    recording_state_clone,
-                                    RecordingOptions {
-                                        user_id: "devin".to_string(),
-                                        audio_input_name: "default".to_string(),
-                                        audio_output_name: "default".to_string(),
-                                    },
-                                    conversation.id.try_into().unwrap(),
-                                )
-                                .await;
-                            } else {
-                                println!("Device is alive, recording running");
-                            };
-                        } else {
-                            let app_state: tauri::State<AppState> = _app_handle.state();
-                            let recording_state: tauri::State<
-                                Arc<tauri::async_runtime::Mutex<RecordingState>>,
-                            > = _app_handle.state();
-                            let recording_state_clone = recording_state.clone();
-                            let should_stop_recording = {
-                                let recording_guard = recording_state.lock().await;
-                                if recording_guard.media_process.is_some() {
-                                    true
-                                } else {
-                                    false
-                                }
-                            };
+            //                 if should_start_recording {
+            //                     println!("Device is alive, starting recording");
+            //                     let conversation = Mutation::create_conversation(
+            //                         &app_state.db,
+            //                         entity::conversation::Model {
+            //                             title: "bla".to_string(),
+            //                             id: 0,
+            //                             created_at: String::new(),
+            //                             updated_at: String::new(),
+            //                         },
+            //                     )
+            //                     .await
+            //                     .expect("could not insert conversation")
+            //                     .try_into_model()
+            //                     .expect("could not turn active model into model");
+            //                     let _ = _start_recording(
+            //                         recording_state_clone,
+            //                         RecordingOptions {
+            //                             user_id: "devin".to_string(),
+            //                             audio_input_name: "default".to_string(),
+            //                             audio_output_name: "default".to_string(),
+            //                         },
+            //                         conversation.id.try_into().unwrap(),
+            //                     )
+            //                     .await;
+            //                 } else {
+            //                     println!("Device is alive, recording running");
+            //                 };
+            //             } else {
+            //                 let app_state: tauri::State<AppState> = _app_handle.state();
+            //                 let recording_state: tauri::State<
+            //                     Arc<tauri::async_runtime::Mutex<RecordingState>>,
+            //                 > = _app_handle.state();
+            //                 let recording_state_clone = recording_state.clone();
+            //                 let should_stop_recording = {
+            //                     let recording_guard = recording_state.lock().await;
+            //                     if recording_guard.media_process.is_some() {
+            //                         true
+            //                     } else {
+            //                         false
+            //                     }
+            //                 };
 
-                            let _ = &app_state.db;
+            //                 let _ = &app_state.db;
 
-                            if should_stop_recording {
-                                println!("Device is not alive, stopping recording");
-                                // let _ = _stop_recording(recording_state_clone).await;
-                            } else {
-                                println!("Device is not alive, no recording running");
-                            };
-                        }
-                        Ok::<(), ()>(())
-                    }
-                    .await
-                    {
-                        Ok(_) => {}
-                        Err(_) => {
-                            // Handle the error if necessary, or just log that something went wrong
-                            eprintln!("An error occurred in the loop iteration, but continuing...");
-                        }
-                    }
-                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                }
-            });
+            //                 if should_stop_recording {
+            //                     println!("Device is not alive, stopping recording");
+            //                     // let _ = _stop_recording(recording_state_clone).await;
+            //                 } else {
+            //                     println!("Device is not alive, no recording running");
+            //                 };
+            //             }
+            //             Ok::<(), ()>(())
+            //         }
+            //         .await
+            //         {
+            //             Ok(_) => {}
+            //             Err(_) => {
+            //                 // Handle the error if necessary, or just log that something went wrong
+            //                 eprintln!("An error occurred in the loop iteration, but continuing...");
+            //             }
+            //         }
+            //         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            //     }
+            // });
 
             println!("SETUP SUCCESS");
             Ok(())

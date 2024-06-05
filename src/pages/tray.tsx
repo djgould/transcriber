@@ -54,6 +54,7 @@ import useIsTray from "@/hooks/useIsTray";
 import { NextPageWithLayout } from "./_app";
 import { TrayLayout } from "@/components/layout/tray";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { RecordingButton } from "@/components/recording/RecordingButton";
 
 const Page: NextPageWithLayout = () => {
   const isTray = useIsTray();
@@ -82,43 +83,6 @@ const Page: NextPageWithLayout = () => {
 
   const viewConversation = async (conversationId: number) => {
     await invoke("open_conversation", { conversationId });
-  };
-
-  const startRecording = async () => {
-    createConversationMutation.mutate(undefined, {
-      onSuccess(conversation) {
-        setActiveRecordingInfo({
-          conversation_id: conversation.id,
-          status: "recording",
-        });
-        startRecorderMutation.mutate(
-          {
-            conversation_id: conversation.id,
-          },
-          {
-            onError: () => {
-              setActiveRecordingInfo(undefined);
-            },
-          }
-        );
-      },
-    });
-  };
-
-  const stopRecording = () => {
-    if (!activeRecordingInfo?.conversation_id) return;
-    setActiveRecordingInfo({
-      ...activeRecordingInfo,
-      status: "stopping",
-    });
-    stopRecorderMutation.mutate(
-      { conversation_id: activeRecordingInfo?.conversation_id },
-      {
-        onSuccess: () => {
-          setActiveRecordingInfo(undefined);
-        },
-      }
-    );
   };
 
   return (
@@ -159,30 +123,7 @@ const Page: NextPageWithLayout = () => {
           ))}
         </SelectContent>
       </Select>
-      <Button
-        variant="outline"
-        disabled={activeRecordingInfo?.status === "stopping"}
-        onClick={() => {
-          if (activeRecordingInfo) {
-            stopRecording();
-          } else {
-            startRecording();
-          }
-        }}
-      >
-        {!startRecorderMutation.isPending &&
-        !stopRecorderMutation.isPending &&
-        isRecording.data ? (
-          <Circle className={clsx("text-red-800 fill-red-800 animate-pulse")} />
-        ) : (
-          startRecorderMutation.isPending ||
-          (stopRecorderMutation.isPending ? (
-            <Loader className="animate-spin" />
-          ) : (
-            <Circle className={clsx("text-red-800")} />
-          ))
-        )}
-      </Button>
+      <RecordingButton />
       <Card>
         <CardHeader>
           <CardTitle className="text-lg text-center">
