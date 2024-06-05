@@ -3,7 +3,7 @@ import {
   selectedAudioOutputDeviceAtom,
 } from "@/atoms/audioDeviceAtom";
 import { useToast } from "@/components/ui/use-toast";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { useAtom } from "jotai";
 
@@ -26,6 +26,7 @@ export function useRecorderMutation() {
 }
 
 export function useStartRecorderMutation() {
+  const queryClient = useQueryClient();
   const [selectedAudioInputDevice] = useAtom(selectedAudioInputDeviceAtom);
   const [selectedAudioOutputDevice] = useAtom(selectedAudioOutputDeviceAtom);
   const { toast } = useToast();
@@ -46,6 +47,11 @@ export function useStartRecorderMutation() {
         conversationId: conversation_id,
       });
     },
+    onSuccess() {
+      queryClient.invalidateQueries({
+        queryKey: ["is_recording"],
+      });
+    },
     onError: (error) => {
       toast({
         title: "Error",
@@ -58,10 +64,14 @@ export function useStartRecorderMutation() {
 }
 
 export function useStopRecorderMutation() {
+  const queryClient = useQueryClient();
   const recordingMutation = useMutation({
-    mutationFn: async ({ conversation_id }: { conversation_id: number }) => {
-      return await invoke("stop_recording", {
-        conversationId: conversation_id,
+    mutationFn: async () => {
+      return await invoke("stop_recording");
+    },
+    onSuccess() {
+      queryClient.invalidateQueries({
+        queryKey: ["is_recording"],
       });
     },
   });
@@ -78,4 +88,15 @@ export function useRecordingState() {
   });
 
   return recordingState;
+}
+
+export function useIsRecording() {
+  const isRecordingQuery = useQuery({
+    queryKey: ["is_recording"],
+    queryFn: async () => {
+      return await invoke<boolean>("is_recording");
+    },
+  });
+
+  return isRecordingQuery;
 }

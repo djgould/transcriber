@@ -321,10 +321,7 @@ pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Re
 }
 
 #[tauri::command]
-pub async fn stop_recording(
-    state: State<'_, Arc<Mutex<RecordingState>>>,
-    conversation_id: u64,
-) -> Result<(), String> {
+pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Result<(), String> {
     _stop_recording(state).await
 }
 

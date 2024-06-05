@@ -17,6 +17,7 @@ import {
 } from "@/atoms/audioDeviceAtom";
 import { ReactElement, useEffect, useState } from "react";
 import {
+  useIsRecording,
   useStartRecorderMutation,
   useStopRecorderMutation,
 } from "@/hooks/useRecorder";
@@ -73,6 +74,7 @@ const Page: NextPageWithLayout = () => {
 
   const startRecorderMutation = useStartRecorderMutation();
   const stopRecorderMutation = useStopRecorderMutation();
+  const isRecording = useIsRecording();
 
   const conversations = useConversations();
   const createConversationMutation = useCreateConversationMutation();
@@ -168,13 +170,18 @@ const Page: NextPageWithLayout = () => {
           }
         }}
       >
-        {activeRecordingInfo?.status === "stopping" && (
-          <Loader className="animate-spin" />
-        )}
-        {activeRecordingInfo?.status === "recording" && (
+        {!startRecorderMutation.isPending &&
+        !stopRecorderMutation.isPending &&
+        isRecording.data ? (
           <Circle className={clsx("text-red-800 fill-red-800 animate-pulse")} />
+        ) : (
+          startRecorderMutation.isPending ||
+          (stopRecorderMutation.isPending ? (
+            <Loader className="animate-spin" />
+          ) : (
+            <Circle className={clsx("text-red-800")} />
+          ))
         )}
-        {!activeRecordingInfo && <Circle className={clsx("text-red-800")} />}
       </Button>
       <Card>
         <CardHeader>

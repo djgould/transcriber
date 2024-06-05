@@ -19,7 +19,7 @@ impl Query {
     ) -> Result<(Vec<conversation::Model>, u64), DbErr> {
         // Setup paginator
         let paginator = Conversation::find()
-            .order_by_asc(conversation::Column::Id)
+            .order_by_desc(conversation::Column::CreatedAt)
             .paginate(db, posts_per_page);
         let num_pages = paginator.num_pages().await?;
 

@@ -19,10 +19,7 @@ use core_foundation::string::CFString;
 use coreaudio::audio_unit::macos_helpers::{
     get_default_device_id, get_device_id_from_name, get_device_name,
 };
-use coreaudio_sys::{
-    AudioBufferList, AudioDeviceCreateIOProcID, AudioDeviceID, AudioDeviceIOProc,
-    AudioDeviceIOProcID, AudioDeviceStart, AudioObjectID, AudioTimeStamp, OSStatus,
-};
+use coreaudio_sys::AudioDeviceID;
 use entity::conversation::Model;
 use entity::conversation::{self, Model as ConversationModel};
 use ffmpeg_sidecar::command::ffmpeg_is_installed;
@@ -33,18 +30,13 @@ use ffmpeg_sidecar::download::unpack_ffmpeg;
 use ffmpeg_sidecar::error::Result as FfmpegResult;
 use ffmpeg_sidecar::paths::sidecar_dir;
 use ffmpeg_sidecar::version::ffmpeg_version;
-use libc::{c_char, c_int, c_void, dlopen, dlsym, RTLD_NOW};
 use mac_notification_sys::get_bundle_identifier_or_default;
-use mac_notification_sys::send_notification;
 use mac_notification_sys::set_application;
 use migration::Migrator;
 use migration::MigratorTrait;
-use objc::runtime::BOOL;
 use service::sea_orm::{Database, TryIntoModel};
 use service::sea_orm::{DatabaseConnection, Set};
 use service::Mutation;
-use std::ffi::CString;
-use std::ptr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tauri::async_runtime;
@@ -52,15 +44,12 @@ use tauri::image::Image;
 use tauri::tray::ClickType;
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
-use tauri::State;
 use tauri::WindowEvent;
 use tauri_plugin_positioner::Position;
 use tauri_plugin_positioner::WindowExt;
-use tokio::sync::watch::Sender;
 use transcribe::{get_complete_transcription, get_real_time_transcription};
 
 use crate::device_listener::ActiveListener;
-use crate::media::set_configurator_id;
 use crate::recorder::{RecordingOptions, _start_recording, _stop_recording};
 use commands::{
     conversation::{
@@ -71,6 +60,7 @@ use commands::{
         enumerate_audio_input_devices, enumerate_audio_output_devices, set_input_device_name,
         set_output_device_name,
     },
+    recording::is_recording,
 };
 use media::set_target_output_device;
 use recorder::{delete_recording_data, start_recording, stop_recording, RecordingState};
@@ -347,6 +337,7 @@ pub fn run() {
             set_output_device_name,
             get_summary_for_converstation,
             open_conversation,
+            is_recording,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
