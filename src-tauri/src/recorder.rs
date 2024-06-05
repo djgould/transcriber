@@ -40,6 +40,7 @@ pub async fn _start_recording(
     conversation_id: u32,
 ) -> Result<(), String> {
     let mut state_guard = state.lock().await;
+    send_notification("Platy", None, "Starting recording", None).unwrap();
 
     let shutdown_flag = Arc::new(AtomicBool::new(false));
 
@@ -53,15 +54,13 @@ pub async fn _start_recording(
 
     state_guard.conversation_id = Some(conversation_id);
 
-    let audio_input_chunks_dir = data_dir
+    let output_dir = data_dir
         .join("chunks/audio")
-        .join(conversation_id.to_string())
-        .join("input");
-    let audio_output_chunks_dir = data_dir
-        .join("chunks/audio")
-        .join(conversation_id.to_string())
-        .join("output");
+        .join(conversation_id.to_string());
+    let audio_input_chunks_dir = output_dir.join("input");
+    let audio_output_chunks_dir = output_dir.join("output");
 
+    clean_and_create_dir(&output_dir)?;
     clean_and_create_dir(&audio_input_chunks_dir)?;
     clean_and_create_dir(&audio_output_chunks_dir)?;
 
@@ -250,89 +249,17 @@ pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Re
 
     guard.shutdown_flag.store(true, Ordering::SeqCst);
 
+    if let Some(mut media_process) = guard.media_process.take() {
+        println!("Stopping media recording...");
+        media_process
+            .stop_media_recording()
+            .await
+            .expect("Failed to stop media recording");
+    }
+
     let conversation_id = guard
         .conversation_id
-        .expect("Failed to stop recording, no conversation_id in state");
-
-    if let Some(mut media_process) = guard.media_process.take() {
-        println!("Stopping media recording...");
-        media_process
-            .stop_media_recording()
-            .await
-            .expect("Failed to stop media recording");
-    }
-
-    // let is_local_mode = match dotenv_codegen::dotenv!("NEXT_PUBLIC_LOCAL_MODE") {
-    //     "true" => true,
-    //     _ => false,
-    // };
-
-    // if !is_local_mode {
-    //     while !guard.audio_uploading_finished.load(Ordering::SeqCst) {
-    //         println!("Waiting for uploads to finish...");
-    //         tokio::time::sleep(Duration::from_millis(50)).await;
-    //     }
-    // }
-
-    // while !guard.audio_uploading_finished.load(Ordering::SeqCst) {
-    //     println!("Waiting for uploads to finish...");
-    //     tokio::time::sleep(Duration::from_millis(50)).await;
-    // }
-
-    let data_dir = guard.data_dir.clone();
-    let recording_dir = data_dir
-        .expect("no data directory")
-        .join("chunks/audio")
-        .join(conversation_id.to_string());
-    let input_dir = recording_dir.join("input");
-    let output_dir = recording_dir.join("output");
-    concat_segments(&input_dir)
-        .await
-        .map_err(|e| e.to_string())?;
-    concat_segments(&output_dir)
-        .await
-        .map_err(|e| e.to_string())?;
-    combine_segments(&recording_dir)
-        .await
-        .map_err(|e| e.to_string())?;
-    tokio::time::sleep(Duration::from_millis(50)).await;
-
-    println!("combined segments..");
-
-    let combined_audio_file = recording_dir.join("combined.wav");
-    let transcription_output_file = recording_dir.join("transcription.json");
-    transcribe_wav_file_and_write(&combined_audio_file, &transcription_output_file)
-        .map_err(|e| e.to_string())?;
-    let transcription = load_transcription(transcription_output_file)
-        .await
-        .expect("Failed to load transcription");
-    let summary = summarize(&transcription.full_text.join(" CHANGE_SPEAKER_TOKEN "))
-        .await
-        .expect("Couldn't generate summary");
-    println!("summary: {}", summary);
-    println!("All recordings and uploads stopped.");
-
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn stop_recording(
-    state: State<'_, Arc<Mutex<RecordingState>>>,
-    conversation_id: u64,
-) -> Result<(), String> {
-    let mut guard: tokio::sync::MutexGuard<RecordingState> = state.lock().await;
-
-    println!("Stopping media recording...");
-
-    guard.shutdown_flag.store(true, Ordering::SeqCst);
-
-    if let Some(mut media_process) = guard.media_process.take() {
-        println!("Stopping media recording...");
-        media_process
-            .stop_media_recording()
-            .await
-            .expect("Failed to stop media recording");
-    }
+        .expect("can't stop recording without conversation id");
 
     // let is_local_mode = match dotenv_codegen::dotenv!("NEXT_PUBLIC_LOCAL_MODE") {
     //     "true" => true,
@@ -391,6 +318,14 @@ pub async fn stop_recording(
     println!("All recordings and uploads stopped.");
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn stop_recording(
+    state: State<'_, Arc<Mutex<RecordingState>>>,
+    conversation_id: u64,
+) -> Result<(), String> {
+    _stop_recording(state).await
 }
 
 #[tauri::command]

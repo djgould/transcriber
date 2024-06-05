@@ -100,3 +100,42 @@ pub async fn get_summary_for_converstation(
 
     Ok(json_content)
 }
+
+use tauri::Manager;
+
+#[tauri::command]
+pub async fn open_conversation(
+    app_handle: tauri::AppHandle,
+    conversation_id: u32,
+) -> Result<(), String> {
+    let window = app_handle.get_webview_window("app-window");
+    if window.is_none() {
+        println!("No window found");
+        let mut window = tauri::WebviewWindowBuilder::from_config(
+            &app_handle,
+            &app_handle.config().app.windows.get(1).unwrap().clone(),
+        )
+        .unwrap()
+        .build()
+        .expect("Failed to create window");
+        window.navigate(
+            window
+                .url()
+                .unwrap()
+                .join(&format!("/main/conversations/{conversation_id}"))
+                .unwrap(),
+        );
+    } else {
+        let mut window = window.unwrap();
+        window.navigate(
+            window
+                .url()
+                .unwrap()
+                .join(&format!("/main/conversations/{conversation_id}"))
+                .unwrap(),
+        );
+        let _ = window.set_focus();
+    }
+
+    Ok(())
+}

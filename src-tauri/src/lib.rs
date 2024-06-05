@@ -16,7 +16,9 @@ use audio::macos::aggregate_device::{
 use audio::macos::helpers::{all_device_uids, check_device_exists, get_device_uid};
 use core_foundation::base::TCFType;
 use core_foundation::string::CFString;
-use coreaudio::audio_unit::macos_helpers::{get_default_device_id, get_device_name};
+use coreaudio::audio_unit::macos_helpers::{
+    get_default_device_id, get_device_id_from_name, get_device_name,
+};
 use coreaudio_sys::{
     AudioBufferList, AudioDeviceCreateIOProcID, AudioDeviceID, AudioDeviceIOProc,
     AudioDeviceIOProcID, AudioDeviceStart, AudioObjectID, AudioTimeStamp, OSStatus,
@@ -63,7 +65,7 @@ use crate::recorder::{RecordingOptions, _start_recording, _stop_recording};
 use commands::{
     conversation::{
         create_conversation, delete_conversation, get_conversation, get_conversations,
-        get_summary_for_converstation,
+        get_summary_for_converstation, open_conversation,
     },
     devices::{
         enumerate_audio_input_devices, enumerate_audio_output_devices, set_input_device_name,
@@ -126,7 +128,6 @@ pub fn run() {
 
     handle_ffmpeg_installation().expect("Failed to install FFmpeg");
 
-    let input_device_id = get_default_device_id(true).expect("failed to get default input");
     let device_id = get_default_device_id(false).expect("failed to get default device");
     let device_uid = get_device_uid(device_id).expect("failed to get device uid");
     let aggregate_device_result =
@@ -141,6 +142,17 @@ pub fn run() {
     } else {
         println!("Aggregate microphone already exists");
     }
+    let input_device_id =
+        get_device_id_from_name("Platy Microphone", true).expect("Platy Microphone doesn't exist");
+
+    let bundle = get_bundle_identifier_or_default("com.devgould.platy");
+    println!("bundle {}", bundle);
+    set_application(&bundle).unwrap();
+
+    let mut listener = ActiveListener::new(tx);
+    listener
+        .register(input_device_id)
+        .expect("Failed to register listener");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -218,11 +230,6 @@ pub fn run() {
             let state = AppState { db };
             app.manage(state);
 
-            let mut listener = ActiveListener::new(tx);
-            // listener
-            //     .register(device_id)
-            //     .expect("Failed to register listener");
-
             let device_state = DeviceState {
                 selected_input_name: Some(default_input_name),
                 selected_output_name: Some(default_output_name),
@@ -233,92 +240,92 @@ pub fn run() {
 
             let _app_handle = app.handle().clone();
 
-            // println!("Listening for microphone state changes...");
-            // tauri::async_runtime::spawn(async move {
-            //     loop {
-            //         match async {
-            //             if *rx.borrow() {
-            //                 let app_state: tauri::State<AppState> = _app_handle.state();
-            //                 let recording_state: tauri::State<
-            //                     Arc<tauri::async_runtime::Mutex<RecordingState>>,
-            //                 > = _app_handle.state();
-            //                 let recording_state_clone = recording_state.clone();
-            //                 let should_start_recording = {
-            //                     let recording_guard = recording_state.lock().await;
-            //                     if recording_guard.media_process.is_some() {
-            //                         false
-            //                     } else {
-            //                         true
-            //                     }
-            //                 };
+            println!("Listening for microphone state changes...");
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    match async {
+                        if *rx.borrow() {
+                            let app_state: tauri::State<AppState> = _app_handle.state();
+                            let recording_state: tauri::State<
+                                Arc<tauri::async_runtime::Mutex<RecordingState>>,
+                            > = _app_handle.state();
+                            let recording_state_clone = recording_state.clone();
+                            let should_start_recording = {
+                                let recording_guard = recording_state.lock().await;
+                                if recording_guard.media_process.is_some() {
+                                    false
+                                } else {
+                                    true
+                                }
+                            };
 
-            //                 let _ = &app_state.db;
+                            let _ = &app_state.db;
 
-            //                 if should_start_recording {
-            //                     println!("Device is alive, starting recording");
-            //                     let conversation = Mutation::create_conversation(
-            //                         &app_state.db,
-            //                         entity::conversation::Model {
-            //                             title: "bla".to_string(),
-            //                             id: 0,
-            //                             created_at: String::new(),
-            //                             updated_at: String::new(),
-            //                         },
-            //                     )
-            //                     .await
-            //                     .expect("could not insert conversation")
-            //                     .try_into_model()
-            //                     .expect("could not turn active model into model");
-            //                     let _ = _start_recording(
-            //                         recording_state_clone,
-            //                         RecordingOptions {
-            //                             user_id: "devin".to_string(),
-            //                             audio_input_name: "default".to_string(),
-            //                             audio_output_name: "default".to_string(),
-            //                         },
-            //                         conversation.id.try_into().unwrap(),
-            //                     )
-            //                     .await;
-            //                 } else {
-            //                     println!("Device is alive, recording running");
-            //                 };
-            //             } else {
-            //                 let app_state: tauri::State<AppState> = _app_handle.state();
-            //                 let recording_state: tauri::State<
-            //                     Arc<tauri::async_runtime::Mutex<RecordingState>>,
-            //                 > = _app_handle.state();
-            //                 let recording_state_clone = recording_state.clone();
-            //                 let should_stop_recording = {
-            //                     let recording_guard = recording_state.lock().await;
-            //                     if recording_guard.media_process.is_some() {
-            //                         true
-            //                     } else {
-            //                         false
-            //                     }
-            //                 };
+                            if should_start_recording {
+                                println!("Device is alive, starting recording");
+                                let conversation = Mutation::create_conversation(
+                                    &app_state.db,
+                                    entity::conversation::Model {
+                                        title: "bla".to_string(),
+                                        id: 0,
+                                        created_at: String::new(),
+                                        updated_at: String::new(),
+                                    },
+                                )
+                                .await
+                                .expect("could not insert conversation")
+                                .try_into_model()
+                                .expect("could not turn active model into model");
+                                let _ = _start_recording(
+                                    recording_state_clone,
+                                    RecordingOptions {
+                                        user_id: "devin".to_string(),
+                                        audio_input_name: "default".to_string(),
+                                        audio_output_name: "default".to_string(),
+                                    },
+                                    conversation.id.try_into().unwrap(),
+                                )
+                                .await;
+                            } else {
+                                println!("Device is alive, recording running");
+                            };
+                        } else {
+                            let app_state: tauri::State<AppState> = _app_handle.state();
+                            let recording_state: tauri::State<
+                                Arc<tauri::async_runtime::Mutex<RecordingState>>,
+                            > = _app_handle.state();
+                            let recording_state_clone = recording_state.clone();
+                            let should_stop_recording = {
+                                let recording_guard = recording_state.lock().await;
+                                if recording_guard.media_process.is_some() {
+                                    true
+                                } else {
+                                    false
+                                }
+                            };
 
-            //                 let _ = &app_state.db;
+                            let _ = &app_state.db;
 
-            //                 if should_stop_recording {
-            //                     println!("Device is not alive, stopping recording");
-            //                     let _ = _stop_recording(recording_state_clone).await;
-            //                 } else {
-            //                     println!("Device is not alive, no recording running");
-            //                 };
-            //             }
-            //             Ok::<(), ()>(())
-            //         }
-            //         .await
-            //         {
-            //             Ok(_) => {}
-            //             Err(_) => {
-            //                 // Handle the error if necessary, or just log that something went wrong
-            //                 eprintln!("An error occurred in the loop iteration, but continuing...");
-            //             }
-            //         }
-            //         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            //     }
-            // });
+                            if should_stop_recording {
+                                println!("Device is not alive, stopping recording");
+                                // let _ = _stop_recording(recording_state_clone).await;
+                            } else {
+                                println!("Device is not alive, no recording running");
+                            };
+                        }
+                        Ok::<(), ()>(())
+                    }
+                    .await
+                    {
+                        Ok(_) => {}
+                        Err(_) => {
+                            // Handle the error if necessary, or just log that something went wrong
+                            eprintln!("An error occurred in the loop iteration, but continuing...");
+                        }
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                }
+            });
 
             println!("SETUP SUCCESS");
             Ok(())
@@ -339,6 +346,7 @@ pub fn run() {
             set_input_device_name,
             set_output_device_name,
             get_summary_for_converstation,
+            open_conversation,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

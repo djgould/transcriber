@@ -52,6 +52,7 @@ import { useRouter } from "next/router";
 import useIsTray from "@/hooks/useIsTray";
 import { NextPageWithLayout } from "./_app";
 import { TrayLayout } from "@/components/layout/tray";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 const Page: NextPageWithLayout = () => {
   const isTray = useIsTray();
@@ -76,6 +77,10 @@ const Page: NextPageWithLayout = () => {
   const conversations = useConversations();
   const createConversationMutation = useCreateConversationMutation();
   const deleteConversationMutation = useDeleteConversationMutation();
+
+  const viewConversation = async (conversationId: number) => {
+    await invoke("open_conversation", { conversationId });
+  };
 
   const startRecording = async () => {
     createConversationMutation.mutate(undefined, {
@@ -193,11 +198,13 @@ const Page: NextPageWithLayout = () => {
                     {new Date(conversation.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="font-medium flex justify-between">
-                    <Link href={`/conversations/${conversation.id}`}>
-                      <Button size={"sm"} variant={"secondary"}>
-                        <Eye />
-                      </Button>
-                    </Link>
+                    <Button
+                      size={"sm"}
+                      variant={"secondary"}
+                      onClick={() => viewConversation(conversation.id)}
+                    >
+                      <Eye />
+                    </Button>
 
                     <Button
                       size={"sm"}

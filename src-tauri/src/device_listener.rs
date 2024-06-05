@@ -77,7 +77,9 @@ impl ActiveListener {
                 &data_size as *const _ as *mut _,
                 &alive as *const _ as *mut _,
             );
+            println!("alive listener");
             self_ptr.alive.store(alive > 0, Ordering::SeqCst);
+            println!("updated alive store");
             self_ptr.sender.send(alive > 0).ok();
             result
         }
