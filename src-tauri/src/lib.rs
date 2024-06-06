@@ -138,7 +138,8 @@ pub fn run() {
                 Ok(())
             }
 
-            handle_ffmpeg_installation().expect("Failed to install FFmpeg");
+            ffmpeg_sidecar::download::auto_download().unwrap();
+            // handle_ffmpeg_installation().expect("Failed to install FFmpeg");
 
             let device_id = get_default_device_id(false).expect("failed to get default device");
             let device_uid = get_device_uid(device_id).expect("failed to get device uid");
