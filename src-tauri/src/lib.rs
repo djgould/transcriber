@@ -88,6 +88,8 @@ pub fn run() {
         error!("Panicked: {:?}", info);
     }));
 
+    ffmpeg_sidecar::download::auto_download().expect("Failed to download ffmpeg");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -109,37 +111,6 @@ pub fn run() {
                 get_device_name(device_id).expect("Failed to get the default device name");
             let default_output_name = get_device_name(default_output_device_id)
                 .expect("Failed to get the default device name");
-
-            fn handle_ffmpeg_installation() -> FfmpegResult<()> {
-                if ffmpeg_is_installed() {
-                    info!("FFmpeg is already installed! 🎉");
-                    return Ok(());
-                }
-
-                match check_latest_version() {
-                    Ok(version) => info!("Latest available version: {}", version),
-                    Err(_) => info!("Skipping version check on this platform."),
-                }
-
-                let download_url = ffmpeg_download_url()?;
-                let destination = sidecar_dir()?;
-
-                info!("Downloading from: {:?}", download_url);
-                let archive_path = download_ffmpeg_package(download_url, &destination)?;
-                info!("Downloaded package: {:?}", archive_path);
-
-                info!("Extracting...");
-                unpack_ffmpeg(&archive_path, &destination)?;
-
-                let version = ffmpeg_version()?;
-                info!("FFmpeg version: {}", version);
-
-                info!("Done! 🏁");
-                Ok(())
-            }
-
-            ffmpeg_sidecar::download::auto_download().unwrap();
-            // handle_ffmpeg_installation().expect("Failed to install FFmpeg");
 
             let device_id = get_default_device_id(false).expect("failed to get default device");
             let device_uid = get_device_uid(device_id).expect("failed to get device uid");

@@ -41,7 +41,7 @@ pub async fn _start_recording(
     conversation_id: u32,
 ) -> Result<(), String> {
     let mut state_guard = state.lock().await;
-    send_notification("Platy", None, "Starting recording", None).unwrap();
+    // send_notification("Platy", None, "Starting recording", None).unwrap();
 
     let shutdown_flag = Arc::new(AtomicBool::new(false));
 
@@ -243,7 +243,10 @@ fn write_concat_file(concat_file_path: &PathBuf, segment_files: &Vec<String>) ->
     Ok(())
 }
 
-pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Result<(), String> {
+pub async fn _stop_recording(
+    handle: tauri::AppHandle,
+    state: State<'_, Arc<Mutex<RecordingState>>>,
+) -> Result<(), String> {
     let mut guard: tokio::sync::MutexGuard<RecordingState> = state.lock().await;
 
     info!("Stopping media recording...");
@@ -302,7 +305,7 @@ pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Re
     let combined_audio_file = recording_dir.join("combined.wav");
     let transcription_output_file = recording_dir.join("transcription.json");
     let summary_output_file = recording_dir.join("summary.json");
-    transcribe_wav_file_and_write(&combined_audio_file, &transcription_output_file)
+    transcribe_wav_file_and_write(handle, &combined_audio_file, &transcription_output_file)
         .map_err(|e| e.to_string())?;
     let transcription = load_transcription(transcription_output_file)
         .await
@@ -322,8 +325,11 @@ pub async fn _stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Re
 }
 
 #[tauri::command]
-pub async fn stop_recording(state: State<'_, Arc<Mutex<RecordingState>>>) -> Result<(), String> {
-    _stop_recording(state).await
+pub async fn stop_recording(
+    handle: tauri::AppHandle,
+    state: State<'_, Arc<Mutex<RecordingState>>>,
+) -> Result<(), String> {
+    _stop_recording(handle, state).await
 }
 
 #[tauri::command]
