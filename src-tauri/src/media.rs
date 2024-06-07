@@ -93,8 +93,8 @@ impl MediaRecorder {
         options: RecordingOptions,
         audio_input_chunks_dir: &Path,
         audio_output_chunks_dir: &Path,
-        custom_input_device: Option<&str>,
-        custom_output_device: Option<&str>,
+        input_device_id: Option<AudioDeviceID>,
+        output_device_id: Option<AudioDeviceID>,
     ) -> Result<(), String> {
         self.options = Some(options.clone());
 
@@ -121,8 +121,12 @@ impl MediaRecorder {
 
         let audio_output_channel_receiver =
             Arc::new(Mutex::new(self.audio_output_channel_receiver.take()));
-        let input_device = get_device(custom_input_device, DeviceType::AudioInput);
-        let output_device = get_device(custom_output_device, DeviceType::AudioOutput);
+        let input_device_name =
+            get_device_name(input_device_id.unwrap()).expect("failed to get input device name");
+        let input_device = get_device(Some(&input_device_name), DeviceType::AudioInput);
+        let output_device_name =
+            get_device_name(output_device_id.unwrap()).expect("failed to get output device name");
+        let output_device = get_device(Some(&output_device_name), DeviceType::AudioInput);
 
         let input_config: cpal::SupportedStreamConfig = input_device
             .supported_input_configs()
@@ -142,39 +146,37 @@ impl MediaRecorder {
             })
             .with_max_sample_rate();
 
-        if custom_input_device != Some("None") {
-            info!("Building input stream...");
-            info!("input_device {}", input_device.name().unwrap());
-            let stream_result: Result<cpal::Stream, cpal::BuildStreamError> = build_audio_stream(
-                &input_config,
-                &input_device,
-                audio_input_start_time,
-                audio_input_channel_sender,
-            );
+        info!("Building input stream...");
+        info!("input_device {}", input_device.name().unwrap());
+        let stream_result: Result<cpal::Stream, cpal::BuildStreamError> = build_audio_stream(
+            &input_config,
+            &input_device,
+            audio_input_start_time,
+            audio_input_channel_sender,
+        );
 
-            let stream = stream_result.map_err(|_| "Failed to build input stream")?;
-            self.input_stream = Some(stream);
-            self.trigger_play_input()?;
-        }
+        let stream = stream_result.map_err(|_| "Failed to build input stream")?;
+        self.input_stream = Some(stream);
+        self.trigger_play_input()?;
 
-        if custom_output_device != Some("None") {
-            info!("Building output stream...");
-            info!("output_device {}", output_device.name().unwrap());
-            let device_id = get_device_id_from_name("Platy Speaker", false)
-                .expect("Failed to get device id from name");
-            let result = build_coreaudio_audio_stream(
-                device_id,
-                44100.0,
-                2,
-                audio_output_start_time,
-                audio_output_channel_sender,
-            );
+        info!("Building output stream..");
+        info!(
+            "output_device id: {} name: {}",
+            output_device_id.unwrap(),
+            output_device_name
+        );
+        let result = build_coreaudio_audio_stream(
+            output_device_id.unwrap(),
+            44100.0,
+            2,
+            audio_output_start_time,
+            audio_output_channel_sender,
+        );
 
-            let output_audio_unit =
-                result.map_err(|err| format!("Failed to build input stream: {}", err))?;
-            self.output_audio_unit = Some(output_audio_unit);
-            self.trigger_play_output()?;
-        }
+        let output_audio_unit =
+            result.map_err(|err| format!("Failed to build input stream: {}", err))?;
+        self.output_audio_unit = Some(output_audio_unit);
+        self.trigger_play_output()?;
 
         info!("Starting audio recording and processing...");
 
@@ -195,7 +197,7 @@ impl MediaRecorder {
                 },
                 self.ffmpeg_audio_input_stdin.clone(),
                 &audio_input_file_path,
-                custom_input_device,
+                Some(&input_device_name),
                 audio_input_channel_receiver,
             )
             .await?;
@@ -211,7 +213,7 @@ impl MediaRecorder {
                 "f32le",
                 self.ffmpeg_audio_output_stdin.clone(),
                 &audio_output_file_path,
-                custom_output_device,
+                Some(&output_device_name),
                 audio_output_channel_receiver,
             )
             .await?;
@@ -590,53 +592,6 @@ fn audio_device_uid_for_device_id(device_id: AudioDeviceID) -> Result<String, co
     Ok(c_str.to_string_lossy().into_owned())
 }
 
-fn all_audio_output_devices() -> Vec<AudioDeviceID> {
-    let device_id: coreaudio_sys::AudioDeviceID = coreaudio_sys::kAudioObjectUnknown;
-    let mut size = std::mem::size_of::<coreaudio_sys::AudioDeviceID>() as u32;
-    let property_address = coreaudio_sys::AudioObjectPropertyAddress {
-        mSelector: kAudioHardwarePropertyDevices,
-        mScope: coreaudio_sys::kAudioObjectPropertyScopeGlobal,
-        mElement: coreaudio_sys::kAudioObjectPropertyElementMaster,
-    };
-    let devices_size: u32 = 0;
-    unsafe {
-        AudioObjectGetPropertyDataSize(
-            kAudioObjectSystemObject,
-            &property_address,
-            0,
-            null(),
-            &devices_size as *const u32 as *mut u32,
-        );
-    }
-    let device_count = devices_size / std::mem::size_of::<AudioDeviceID>() as u32;
-
-    if device_count == 0 {
-        return vec![];
-    }
-
-    let mut devices = vec![0; device_count as usize];
-    unsafe {
-        let status = AudioObjectGetPropertyData(
-            kAudioObjectSystemObject,
-            &property_address,
-            0,
-            null(),
-            &mut size,
-            devices.as_mut_ptr() as *mut _,
-        );
-        if coreaudio::Error::from_os_status(status).is_err() {
-            info!(
-                "Error getting output devices: {}",
-                coreaudio::Error::from_os_status(status).unwrap_err()
-            );
-        } else {
-            info!("Successfully got output devices: {}", device_id);
-        }
-    }
-
-    devices
-}
-
 fn set_object_name(
     box_device_id: AudioDeviceID,
     action: &str,
@@ -688,58 +643,6 @@ pub async fn set_target_output_device(device: String) -> Result<(), String> {
     let device_id = get_device_id_from_name(&device, false).expect("failed to get device id");
     let device_uid = audio_device_uid_for_device_id(device_id).expect("failed to get device uid");
     set_object_name(proxy_audio_box, "outputDevice=", &device_uid).map_err(|err| err.to_string())
-}
-
-fn set_identify_value(device: AudioDeviceID, mut value: i32) -> Result<(), coreaudio::Error> {
-    let set_identify_address = AudioObjectPropertyAddress {
-        mSelector: kAudioObjectPropertyIdentify,
-        mScope: kAudioObjectPropertyScopeGlobal,
-        mElement: kAudioObjectPropertyElementMaster,
-    };
-    unsafe {
-        let os_status = AudioObjectSetPropertyData(
-            device,
-            &set_identify_address,
-            0,
-            null(),
-            mem::size_of::<i32>() as u32,
-            &mut value as *mut i32 as *mut c_void,
-        );
-        coreaudio::Error::from_os_status(os_status)
-    }
-}
-
-pub fn set_configurator_id() -> Result<(), coreaudio::Error> {
-    let proxy_audio_box = audio_device_id_for_box_id("ProxyAudioBox_UID");
-
-    if proxy_audio_box == kAudioObjectUnknown {
-        info!("Error: unable to find proxy audio device");
-        // Expected situation if the device isn't installed; not an actual error
-        return Ok(());
-    }
-
-    // Convert process id safely
-    let process_id = process::id().try_into().map_err(|e| {
-        info!("Error converting process ID: {:?}", e);
-        coreaudio::Error::from_os_status(-1).unwrap_err() // Replace with a more relevant error if available
-    })?;
-
-    match set_identify_value(proxy_audio_box, process_id) {
-        Ok(_) => {
-            info!("Configurator ID set successfully");
-            Ok(())
-        }
-        Err(e) => {
-            info!(
-                "Error: unable to set current process as configurator: {}",
-                e
-            );
-            // Decide if this should be fatal or return Ok() as it currently does;
-            // modify return type accordingly.
-            // For now, mirroring existing behavior:
-            Ok(())
-        }
-    }
 }
 
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -953,16 +856,7 @@ fn build_coreaudio_audio_stream(
         .contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_SIGNED_INTEGER);
     let is_packed =
         format_flag.contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_PACKED);
-    info!(
-        "{} {} {} {} {}",
-        !in_stream_format
-            .flags
-            .contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_NON_INTERLEAVED),
-        is_float && !is_signed_integer && is_packed,
-        is_float,
-        !is_signed_integer,
-        is_packed
-    );
+
     let mut input_audio_unit = audio_unit_from_device_id(device_id, true)?;
     let id = coreaudio::sys::kAudioUnitProperty_StreamFormat;
     let asbd = in_stream_format.to_asbd();

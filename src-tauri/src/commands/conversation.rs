@@ -2,6 +2,7 @@ use std::fs::read_to_string;
 use std::sync::Arc;
 
 use entity::conversation::{self, Model as ConversationModel};
+use log::info;
 use service::{
     sea_orm::{DeleteResult, TryIntoModel},
     Mutation, Query,
@@ -37,11 +38,14 @@ pub async fn get_conversation(
 #[tauri::command]
 pub async fn get_conversations(
     state: tauri::State<'_, AppState>,
+    page: u64,
+    items_per_page: u64,
 ) -> Result<Vec<conversation::Model>, ()> {
-    let page = 1;
-    let (conversations, num_pages) = Query::find_conversations_in_page(&state.db, page, 1000)
-        .await
-        .expect("Cannot find posts in page");
+    info!("getting conversations...");
+    let (conversations, num_pages) =
+        Query::find_conversations_in_page(&state.db, page, items_per_page)
+            .await
+            .expect("Cannot find posts in page");
 
     Ok(conversations)
 }
@@ -118,22 +122,15 @@ pub async fn open_conversation(
         .unwrap()
         .build()
         .expect("Failed to create window");
-        window.navigate(
-            window
-                .url()
-                .unwrap()
-                .join(&format!("/main/conversations/{conversation_id}"))
-                .unwrap(),
-        );
+        let mut new_url = window.url().unwrap();
+        new_url.set_path(&format!("main/conversations/{}", conversation_id));
+        window.navigate(new_url);
     } else {
         let mut window = window.unwrap();
-        window.navigate(
-            window
-                .url()
-                .unwrap()
-                .join(&format!("/main/conversations/{conversation_id}"))
-                .unwrap(),
-        );
+        let mut new_url = window.url().unwrap();
+        new_url.set_path(&format!("main/conversations/{}", conversation_id));
+        window.navigate(new_url);
+
         let _ = window.set_focus();
     }
 

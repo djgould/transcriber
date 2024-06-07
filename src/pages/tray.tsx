@@ -55,6 +55,8 @@ import { NextPageWithLayout } from "./_app";
 import { TrayLayout } from "@/components/layout/tray";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { RecordingButton } from "@/components/recording/RecordingButton";
+import { columns } from "@/components/conversations/table/Columns";
+import { DataTable } from "@/components/conversations/table/DataTable";
 
 const Page: NextPageWithLayout = () => {
   const isTray = useIsTray();
@@ -77,7 +79,7 @@ const Page: NextPageWithLayout = () => {
   const stopRecorderMutation = useStopRecorderMutation();
   const isRecording = useIsRecording();
 
-  const conversations = useConversations();
+  const conversations = useConversations(1, 30);
   const createConversationMutation = useCreateConversationMutation();
   const deleteConversationMutation = useDeleteConversationMutation();
 
@@ -86,7 +88,7 @@ const Page: NextPageWithLayout = () => {
   };
 
   return (
-    <div className="p-2 h-screen flex flex-col gap-4">
+    <div className="pt-2 h-screen flex flex-col gap-4">
       <Select
         value={selectedAudioInputDevice}
         onValueChange={(value) => {
@@ -124,52 +126,18 @@ const Page: NextPageWithLayout = () => {
         </SelectContent>
       </Select>
       <RecordingButton />
-      <Card>
-        <CardHeader>
+      <Card className="my-0">
+        <CardHeader className="py-4">
           <CardTitle className="text-lg text-center">
             Your Converstations
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 overflow-y-scroll">
-          <Table>
-            <TableCaption>A list of your recent conversations.</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[100px]">Created at</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {conversations.data?.map((conversation: any) => (
-                <TableRow key={conversation.id}>
-                  <TableCell className="font-medium">
-                    {new Date(conversation.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="font-medium flex justify-between">
-                    <Button
-                      size={"sm"}
-                      variant={"secondary"}
-                      onClick={() => viewConversation(conversation.id)}
-                    >
-                      <Eye />
-                    </Button>
-
-                    <Button
-                      size={"sm"}
-                      variant={"secondary"}
-                      onClick={() => {
-                        deleteConversationMutation.mutate({
-                          conversationId: conversation.id,
-                        });
-                      }}
-                    >
-                      <Trash />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <CardContent className="flex-1 overflow-y-scroll py-0 my-0">
+          <DataTable
+            columns={columns}
+            data={conversations.data || []}
+            pageSize={3}
+          />
         </CardContent>
         <CardFooter className="flex flex-col gap-4"></CardFooter>
       </Card>

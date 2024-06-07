@@ -42,8 +42,11 @@ pub fn create_output_aggregate_device(
     aggregate_device_name: &str,
     aggregate_device_uid: &str,
 ) -> Result<CreateAggregateDeviceResult, coreaudio::Error> {
-    info!("Creating aggregate device..");
-    let mut tap_description = CATapDescription::new_mono_global_tap_but_exclude(vec![]);
+    info!(
+        "Creating aggregate device. output_uid: {} name: {} uid: {}",
+        output_uid, aggregate_device_name, aggregate_device_uid
+    );
+    let tap_description = CATapDescription::new_mono_global_tap_but_exclude(vec![]);
     let tap_id = audio_hardware_create_process_tap(&tap_description).expect("Failed to create tap");
 
     let aggregate_device_name = CFString::new(aggregate_device_name);

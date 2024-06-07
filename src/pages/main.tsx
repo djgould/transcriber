@@ -50,6 +50,8 @@ import { invoke } from "@tauri-apps/api/core";
 import NavBar from "@/components/nav/NavBar";
 import { MainLayout } from "@/components/layout/main";
 import { NextPageWithLayout } from "./_app";
+import { DataTable } from "@/components/conversations/table/DataTable";
+import { columns } from "@/components/conversations/table/Columns";
 
 const Page: NextPageWithLayout = () => {
   const audioInputDevices = useAudioInputDevicesQuery();
@@ -68,7 +70,7 @@ const Page: NextPageWithLayout = () => {
   const startRecorderMutation = useStartRecorderMutation();
   const stopRecorderMutation = useStopRecorderMutation();
 
-  const conversations = useConversations();
+  const conversations = useConversations(1, 30);
   const createConversationMutation = useCreateConversationMutation();
   const deleteConversationMutation = useDeleteConversationMutation();
 
@@ -79,7 +81,13 @@ const Page: NextPageWithLayout = () => {
           <CardTitle className="text-lg">Your Converstations</CardTitle>
         </CardHeader>
         <CardContent className="flex-1 overflow-y-scroll">
-          <Table>
+          <DataTable
+            columns={columns}
+            data={conversations.data || []}
+            pageSize={8}
+          />
+
+          {/* <Table>
             <TableCaption>A list of your recent conversations.</TableCaption>
             <TableHeader>
               <TableRow>
@@ -115,7 +123,7 @@ const Page: NextPageWithLayout = () => {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+          </Table> */}
         </CardContent>
         <CardFooter className="flex flex-col gap-4"></CardFooter>
       </Card>

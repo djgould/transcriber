@@ -19,7 +19,7 @@ use core_foundation::string::CFString;
 use coreaudio::audio_unit::macos_helpers::{
     get_default_device_id, get_device_id_from_name, get_device_name,
 };
-use coreaudio_sys::AudioDeviceID;
+use coreaudio_sys::{AudioDeviceID, AudioObjectID};
 use entity::conversation::Model;
 use entity::conversation::{self, Model as ConversationModel};
 use ffmpeg_sidecar::command::ffmpeg_is_installed;
@@ -40,6 +40,8 @@ use service::sea_orm::{DatabaseConnection, Set};
 use service::Mutation;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 use tauri::async_runtime;
 use tauri::image::Image;
 use tauri::tray::ClickType;
@@ -47,6 +49,7 @@ use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
 use tauri::WindowEvent;
 use tauri_plugin_log::{Target, TargetKind};
+use uuid::Uuid;
 // use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_positioner::Position;
 use tauri_plugin_positioner::WindowExt;
@@ -76,7 +79,10 @@ struct DeviceState {
     active_listener: ActiveListener,
     selected_input_name: Option<String>,
     selected_output_name: Option<String>,
+    input_device_id: Option<AudioDeviceID>,
     aggregate_device_id: Option<AudioDeviceID>,
+    tap_id: Option<AudioObjectID>,
+    output_device_id: Option<AudioDeviceID>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -87,6 +93,37 @@ pub fn run() {
         eprintln!("Panicked: {:?}", info);
         error!("Panicked: {:?}", info);
     }));
+
+    let device_id = get_default_device_id(true).expect("Failed to get default device");
+    let default_output_device_id =
+        get_default_device_id(false).expect("Failed to get the default output device");
+    let default_input_name =
+        get_device_name(device_id).expect("Failed to get the default device name");
+    let default_output_name =
+        get_device_name(default_output_device_id).expect("Failed to get the default device name");
+
+    let device_id = get_default_device_id(false).expect("failed to get default device");
+    let device_uid = get_device_uid(device_id).expect("failed to get device uid");
+    let aggregate_device_result =
+        create_output_aggregate_device(&device_uid, "Platy Speaker", &Uuid::new_v4().to_string())
+            .expect("failed to create aggregate device");
+
+    let device_exists = check_device_exists("Platy Microphone");
+    if !device_exists {
+        info!("Aggregate microphone device not found, creating one");
+        create_input_aggregate_device("BuiltInMicrophoneDevice")
+            .expect("failed to create aggregate device");
+    } else {
+        info!("Aggregate microphone already exists");
+    }
+
+    let input_device_id =
+        get_device_id_from_name("Platy Microphone", true).expect("Platy Microphone doesn't exist");
+
+    let mut listener = ActiveListener::new(tx);
+    listener
+        .register(input_device_id)
+        .expect("Failed to register listener");
 
     ffmpeg_sidecar::download::auto_download().expect("Failed to download ffmpeg");
 
@@ -104,37 +141,8 @@ pub fn run() {
                 .build(),
         )
         .setup(move |app| {
-            let device_id = get_default_device_id(true).expect("Failed to get default device");
-            let default_output_device_id =
-                get_default_device_id(false).expect("Failed to get the default output device");
-            let default_input_name =
-                get_device_name(device_id).expect("Failed to get the default device name");
-            let default_output_name = get_device_name(default_output_device_id)
-                .expect("Failed to get the default device name");
-
-            let device_id = get_default_device_id(false).expect("failed to get default device");
-            let device_uid = get_device_uid(device_id).expect("failed to get device uid");
-            let aggregate_device_result =
-                create_output_aggregate_device(&device_uid, "Platy Speaker", "platy-speaker-1")
-                    .expect("failed to create aggregate device");
-
-            let device_exists = check_device_exists("Platy Microphone");
-            if !device_exists {
-                info!("Aggregate microphone device not found, creating one");
-                create_input_aggregate_device("BuiltInMicrophoneDevice")
-                    .expect("failed to create aggregate device");
-            } else {
-                info!("Aggregate microphone already exists");
-            }
-            let input_device_id = get_device_id_from_name("Platy Microphone", true)
-                .expect("Platy Microphone doesn't exist");
-
-            let mut listener = ActiveListener::new(tx);
-            listener
-                .register(input_device_id)
-                .expect("Failed to register listener");
-
             let tray_window = Arc::new(app.app_handle().get_webview_window("tray-window").unwrap());
+            let _ = tray_window.set_visible_on_all_workspaces(true);
             let _ = tray_window.hide();
             let win_clone = tray_window.clone();
             tray_window.on_window_event(move |event| match event {
@@ -208,7 +216,10 @@ pub fn run() {
                 selected_input_name: Some(default_input_name),
                 selected_output_name: Some(default_output_name),
                 active_listener: listener,
+                tap_id: Some(aggregate_device_result.tap_id),
+                input_device_id: Some(input_device_id),
                 aggregate_device_id: Some(aggregate_device_result.aggregate_device_id),
+                output_device_id: Some(device_id),
             };
             app.manage(Arc::new(tauri::async_runtime::Mutex::new(device_state)));
 

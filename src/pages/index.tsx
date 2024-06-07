@@ -60,7 +60,7 @@ export default function Page() {
     selectedAudioOutputDeviceAtom
   );
 
-  const conversations = useConversations();
+  const conversations = useConversations(1, 100);
   const deleteConversationMutation = useDeleteConversationMutation();
 
   return (

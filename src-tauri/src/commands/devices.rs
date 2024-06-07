@@ -6,6 +6,7 @@ use coreaudio::audio_unit::{
     Scope,
 };
 use cpal::traits::{DeviceTrait, HostTrait};
+use log::info;
 use uuid::Uuid;
 
 use crate::{
@@ -28,8 +29,14 @@ pub async fn set_output_device_name(
     let result =
         create_output_aggregate_device(&device_uid, "Platy Speaker", &Uuid::new_v4().to_string())
             .expect("Failed to create aggregate device");
-
+    info!(
+        "updated output device {} aggregate id: {} tap id: {}",
+        guard.selected_output_name.as_ref().unwrap(),
+        result.aggregate_device_id,
+        result.tap_id,
+    );
     guard.aggregate_device_id = Some(result.aggregate_device_id);
+    guard.tap_id = Some(result.tap_id);
     Ok(())
 }
 

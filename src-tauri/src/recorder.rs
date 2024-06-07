@@ -1,3 +1,4 @@
+use coreaudio_sys::AudioObjectID;
 use log::info;
 use mac_notification_sys::{get_bundle_identifier_or_default, send_notification, set_application};
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,7 @@ use crate::media::MediaRecorder;
 use crate::summarize::{generate_action_items, generate_title, summarize, summarize_and_write};
 use crate::transcribe::{load_transcription, transcribe_wav_file_and_write};
 use crate::utils::ffmpeg_path_as_str;
+use crate::DeviceState;
 
 pub struct RecordingState {
     pub media_process: Option<MediaRecorder>,
@@ -37,10 +39,12 @@ pub struct RecordingOptions {
 
 pub async fn _start_recording(
     state: State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+    device_state: State<'_, Arc<tauri::async_runtime::Mutex<DeviceState>>>,
     options: RecordingOptions,
     conversation_id: u32,
 ) -> Result<(), String> {
     let mut state_guard = state.lock().await;
+    let device_state_guard = device_state.lock().await;
     // send_notification("Platy", None, "Starting recording", None).unwrap();
 
     let shutdown_flag = Arc::new(AtomicBool::new(false));
@@ -65,24 +69,12 @@ pub async fn _start_recording(
     clean_and_create_dir(&audio_input_chunks_dir)?;
     clean_and_create_dir(&audio_output_chunks_dir)?;
 
-    let audio_input_name = if options.audio_input_name.is_empty() {
-        None
-    } else {
-        Some(options.audio_input_name.clone())
-    };
-
-    let audio_output_name = if options.audio_output_name.is_empty() {
-        None
-    } else {
-        Some(options.audio_output_name.clone())
-    };
-
     let media_recording_preparation = prepare_media_recording(
         &options,
         &audio_input_chunks_dir,
         &audio_output_chunks_dir,
-        audio_input_name,
-        audio_output_name,
+        device_state_guard.input_device_id,
+        device_state_guard.aggregate_device_id,
     );
     let media_recording_result = media_recording_preparation
         .await
@@ -118,10 +110,11 @@ pub async fn _start_recording(
 #[tauri::command]
 pub async fn start_recording(
     state: State<'_, Arc<tauri::async_runtime::Mutex<RecordingState>>>,
+    device_state: State<'_, Arc<tauri::async_runtime::Mutex<DeviceState>>>,
     options: RecordingOptions,
     conversation_id: u32,
 ) -> Result<(), String> {
-    _start_recording(state, options, conversation_id).await
+    _start_recording(state, device_state, options, conversation_id).await
 }
 use tokio::io::AsyncBufReadExt;
 
@@ -375,8 +368,8 @@ async fn prepare_media_recording(
     options: &RecordingOptions,
     audio_input_chunks_dir: &Path,
     audio_output_chunks_dir: &Path,
-    audio_input_name: Option<String>,
-    audio_output_name: Option<String>,
+    audio_input_id: Option<AudioObjectID>,
+    output_device_id: Option<AudioObjectID>,
 ) -> Result<MediaRecorder, String> {
     let mut media_recorder = MediaRecorder::new();
     media_recorder
@@ -384,8 +377,8 @@ async fn prepare_media_recording(
             options.clone(),
             audio_input_chunks_dir,
             audio_output_chunks_dir,
-            audio_input_name.as_ref().map(String::as_str),
-            audio_output_name.as_ref().map(String::as_str),
+            audio_input_id,
+            output_device_id,
         )
         .await?;
     Ok(media_recorder)

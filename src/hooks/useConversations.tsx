@@ -21,12 +21,15 @@ export const useConversation = (conversationId: number) => {
   return conversation;
 };
 
-export const useConversations = () => {
+export const useConversations = (page: number, itemsPerPage: number) => {
   console.log("use conversations");
   const conversations = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
-      const conversations = await invoke("get_conversations");
+      const conversations = await invoke("get_conversations", {
+        page: page,
+        itemsPerPage: itemsPerPage,
+      });
       console.log(conversations);
       return conversations as any;
     },
