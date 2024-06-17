@@ -155,7 +155,13 @@ pub fn run() {
             let app_window = app.app_handle().get_webview_window("app-window").unwrap();
             let _ = app_window.show();
             TrayIconBuilder::with_id("my-tray")
-                // .icon(Image::from_path("./icons/icon.ico")?)
+                .icon(Image::from_path(
+                    app.app_handle()
+                        .path()
+                        .resource_dir()
+                        .expect("failed to get resource dir")
+                        .join("icons/icon.ico"),
+                )?)
                 .on_tray_icon_event(|app, event| {
                     tauri_plugin_positioner::on_tray_event(app.app_handle(), &event);
                     match event.click_type {
@@ -234,6 +240,9 @@ pub fn run() {
             //                 let recording_state: tauri::State<
             //                     Arc<tauri::async_runtime::Mutex<RecordingState>>,
             //                 > = _app_handle.state();
+            //                 let device_state: tauri::State<
+            //                     Arc<tauri::async_runtime::Mutex<DeviceState>>,
+            //                 > = _app_handle.state();
             //                 let recording_state_clone = recording_state.clone();
             //                 let should_start_recording = {
             //                     let recording_guard = recording_state.lock().await;
@@ -263,6 +272,7 @@ pub fn run() {
             //                     .expect("could not turn active model into model");
             //                     let _ = _start_recording(
             //                         recording_state_clone,
+            //                         device_state,
             //                         RecordingOptions {
             //                             user_id: "devin".to_string(),
             //                             audio_input_name: "default".to_string(),

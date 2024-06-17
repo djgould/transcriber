@@ -32,7 +32,7 @@
       "providerShortName": null,
       "signingIdentity": null
     },
-    "resources": ["./src/models/ggml-small.en-tdrz.bin"],
+    "resources": ["./src/models/ggml-small.en-tdrz.bin", "icons/icon.ico"],
     "shortDescription": "",
     "linux": {
       "deb": {
