@@ -4,7 +4,7 @@ use std::sync::Arc;
 use entity::conversation::{self, Model as ConversationModel};
 use log::info;
 use service::{
-    sea_orm::{DeleteResult, TryIntoModel},
+    sea_orm::{TryIntoModel},
     Mutation, Query,
 };
 
@@ -42,7 +42,7 @@ pub async fn get_conversations(
     items_per_page: u64,
 ) -> Result<Vec<conversation::Model>, ()> {
     info!("getting conversations...");
-    let (conversations, num_pages) =
+    let (conversations, _num_pages) =
         Query::find_conversations_in_page(&state.db, page, items_per_page)
             .await
             .expect("Cannot find posts in page");

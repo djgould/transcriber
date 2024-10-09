@@ -1,27 +1,25 @@
 use byteorder::{ByteOrder, LittleEndian};
 use coreaudio::audio_unit::macos_helpers::{
-    audio_unit_from_device_id, get_audio_device_ids_for_scope, get_audio_device_supports_scope,
-    get_device_id_from_name, get_device_name,
+    audio_unit_from_device_id, get_device_id_from_name, get_device_name,
 };
 use coreaudio::audio_unit::render_callback::{self, data};
 use coreaudio::audio_unit::{AudioUnit, Element, Scope};
 use coreaudio::sys::{
     kAudioHardwarePropertyTranslateUIDToDevice, kAudioObjectPropertyElementMaster,
-    kAudioObjectPropertyScopeGlobal, kAudioObjectSystemObject, AudioDeviceID,
-    AudioObjectGetPropertyData, AudioObjectPropertyAddress,
+    kAudioObjectPropertyScopeGlobal, AudioDeviceID, AudioObjectGetPropertyData,
+    AudioObjectPropertyAddress,
 };
 use coreaudio_sys::{
-    kAudioDevicePropertyDeviceUID, kAudioHardwareNoError, kAudioHardwarePropertyDevices,
-    kAudioHardwarePropertyTranslateUIDToBox, kAudioObjectPropertyIdentify,
-    kAudioObjectPropertyName, kAudioObjectUnknown, kCFAllocatorDefault, kCFStringEncodingUTF8,
-    AudioObjectGetPropertyDataSize, AudioObjectPropertySelector, AudioObjectSetPropertyData,
-    CFRelease, CFStringCreateWithCString, CFStringRef, CFTypeRef,
+    kAudioDevicePropertyDeviceUID, kAudioHardwareNoError, kAudioHardwarePropertyTranslateUIDToBox,
+    kAudioObjectPropertyIdentify, kAudioObjectPropertyName, kCFAllocatorDefault,
+    kCFStringEncodingUTF8, AudioObjectPropertySelector, AudioObjectSetPropertyData, CFRelease,
+    CFStringCreateWithCString, CFStringRef, CFTypeRef,
 };
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat};
 use log::info;
 use std::ffi::{CStr, CString};
-use std::io::Error;
+use std::mem;
 use std::os::raw::{c_char, c_void};
 use std::path::Path;
 use std::process::Stdio;
@@ -31,7 +29,6 @@ use std::sync::{
     Arc,
 };
 use std::time::{Duration, Instant};
-use std::{mem, process, u32};
 
 use tauri::async_runtime::Mutex;
 use tokio::io::AsyncWriteExt;
@@ -468,7 +465,7 @@ impl MediaRecorder {
         &self,
         ffmpeg_binary_path: &str,
         audio_ffmpeg_command: &[String],
-    ) -> Result<(Child, ChildStdin), Error> {
+    ) -> Result<(Child, ChildStdin), std::io::Error> {
         info!("start_audio_ffmpeg_processes");
         let mut audio_process = start_recording_process(ffmpeg_binary_path, audio_ffmpeg_command)
             .await
@@ -483,6 +480,49 @@ impl MediaRecorder {
         })?;
 
         Ok((audio_process, audio_stdin))
+    }
+
+    fn set_object_name(
+        box_device_id: AudioDeviceID,
+        action: &str,
+        new_name: &str,
+    ) -> Result<(), std::io::Error> {
+        let command = format!("{}{}", action, new_name);
+        let set_name_address = AudioObjectPropertyAddress {
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyIdentify,
+        };
+        unsafe {
+            let c_string_new_name = CString::new(command).unwrap();
+            let cf_new_name = CFStringCreateWithCString(
+                kCFAllocatorDefault,
+                c_string_new_name.as_ptr(),
+                kCFStringEncodingUTF8,
+            );
+            let status = AudioObjectSetPropertyData(
+                box_device_id,
+                &set_name_address,
+                0,
+                null(),
+                std::mem::size_of::<CFStringRef>() as u32,
+                &cf_new_name as *const _ as *const c_void,
+            );
+
+            if coreaudio::Error::from_os_status(status).is_err() {
+                info!(
+                    "Error setting object name to device ID: {}",
+                    coreaudio::Error::from_os_status(status).unwrap_err()
+                );
+            } else {
+                info!(
+                    "Successfully set object name to device ID: {}",
+                    box_device_id
+                );
+            }
+            CFRelease(cf_new_name as CFTypeRef);
+        }
+        Ok(())
     }
 }
 
@@ -592,57 +632,13 @@ fn audio_device_uid_for_device_id(device_id: AudioDeviceID) -> Result<String, co
     Ok(c_str.to_string_lossy().into_owned())
 }
 
-fn set_object_name(
-    box_device_id: AudioDeviceID,
-    action: &str,
-    new_name: &str,
-) -> Result<(), Error> {
-    let command = format!("{}{}", action, new_name);
-    let set_name_address = AudioObjectPropertyAddress {
-        mSelector: kAudioObjectPropertyName,
-        mScope: kAudioObjectPropertyScopeGlobal,
-        mElement: kAudioObjectPropertyIdentify,
-    };
-    unsafe {
-        let c_string_new_name = CString::new(command).unwrap();
-        let cf_new_name = unsafe {
-            CFStringCreateWithCString(
-                kCFAllocatorDefault,
-                c_string_new_name.as_ptr(),
-                kCFStringEncodingUTF8,
-            )
-        };
-        let status = AudioObjectSetPropertyData(
-            box_device_id,
-            &set_name_address,
-            0,
-            null(),
-            std::mem::size_of::<CFStringRef>() as u32,
-            &cf_new_name as *const _ as *const c_void,
-        );
-
-        if coreaudio::Error::from_os_status(status).is_err() {
-            info!(
-                "Error setting object name to device ID: {}",
-                coreaudio::Error::from_os_status(status).unwrap_err()
-            );
-        } else {
-            info!(
-                "Successfully set object name to device ID: {}",
-                box_device_id
-            );
-        }
-        CFRelease(cf_new_name as CFTypeRef);
-    }
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn set_target_output_device(device: String) -> Result<(), String> {
     let proxy_audio_box = audio_device_id_for_box_id("ProxyAudioBox_UID");
     let device_id = get_device_id_from_name(&device, false).expect("failed to get device id");
     let device_uid = audio_device_uid_for_device_id(device_id).expect("failed to get device uid");
-    set_object_name(proxy_audio_box, "outputDevice=", &device_uid).map_err(|err| err.to_string())
+    MediaRecorder::set_object_name(proxy_audio_box, "outputDevice=", &device_uid)
+        .map_err(|err| err.to_string())
 }
 
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -823,7 +819,7 @@ const SAMPLE_FORMAT: coreaudio::audio_unit::SampleFormat = coreaudio::audio_unit
 fn build_coreaudio_audio_stream(
     device_id: AudioDeviceID,
     sample_rate: f64,
-    channels: u32,
+    _channels: u32,
     audio_start_time: Arc<Mutex<Option<Instant>>>,
     audio_channel_sender: Option<mpsc::Sender<Vec<u8>>>,
 ) -> Result<AudioUnit, coreaudio::Error> {
@@ -850,12 +846,6 @@ fn build_coreaudio_audio_stream(
         flags: format_flag,
         channels: 1,
     };
-    let is_float =
-        format_flag.contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_FLOAT);
-    let is_signed_integer = format_flag
-        .contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_SIGNED_INTEGER);
-    let is_packed =
-        format_flag.contains(coreaudio::audio_unit::audio_format::LinearPcmFlags::IS_PACKED);
 
     let mut input_audio_unit = audio_unit_from_device_id(device_id, true)?;
     let id = coreaudio::sys::kAudioUnitProperty_StreamFormat;

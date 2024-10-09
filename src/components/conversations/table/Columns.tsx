@@ -5,6 +5,7 @@ import { useDeleteConversationMutation } from "@/hooks/useConversations";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Trash } from "lucide-react";
 import Link from "next/link";
+import { invoke } from "@tauri-apps/api/core";
 
 // This type is used to define the shape of our data.
 // You can use a Zod schema here if you want.
@@ -26,13 +27,20 @@ export const columns: ColumnDef<Conversation>[] = [
     header: "Actions",
     cell: function ActionCell({ row }) {
       const deleteConversationMutation = useDeleteConversationMutation();
+
       return (
         <div className="flex gap-2">
-          <Link href={`/main/conversations/${row.original.id}`}>
-            <Button size={"sm"} variant={"secondary"}>
-              <Eye />
-            </Button>
-          </Link>
+          <Button
+            size={"sm"}
+            variant={"secondary"}
+            onClick={() => {
+              invoke("open_conversation", {
+                conversationId: row.original.id,
+              });
+            }}
+          >
+            <Eye />
+          </Button>
 
           <Button
             size={"sm"}

@@ -12,7 +12,6 @@ use coreaudio_sys::{
 use log::info;
 use objc_foundation::NSString;
 use objc_id::Id;
-use uuid::Uuid;
 
 use std::ffi::CStr;
 

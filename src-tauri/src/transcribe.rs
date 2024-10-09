@@ -1,24 +1,17 @@
 use std::{
-    collections::HashSet,
     fs::{read_dir, read_to_string, File},
     io::Write,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
+    sync::Arc,
 };
 
-use futures::future::join_all;
 use hound::{SampleFormat, WavReader};
 use log::info;
 use serde::{Deserialize, Serialize};
-use tauri::{Manager, State};
-use tokio::sync::Mutex;
+use tauri::Manager;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use crate::{recorder::RecordingState, utils::load_segment_list};
+use crate::recorder::RecordingState;
 
 #[derive(Serialize, Deserialize)]
 pub struct TranscriptionJSON {
@@ -32,7 +25,6 @@ pub fn transcribe_wav_file_and_write(
 ) -> Result<(), String> {
     let filepath_str = wav_filepath.to_str().unwrap_or_default().to_owned();
     info!("{}", filepath_str);
-    use std::path::Path;
 
     let whisper_path = handle
         .path()
@@ -120,53 +112,6 @@ pub fn transcribe_wav_file_and_write(
         .expect("could not write to file");
     Ok(())
 }
-
-// pub async fn start_transcription_loop(
-//     chunks_dir: PathBuf,
-//     shutdown_flag: Arc<AtomicBool>,
-//     transcription_finished: Arc<AtomicBool>,
-// ) -> Result<(), String> {
-//     let mut watched_segments: HashSet<String> = HashSet::new();
-//     let mut is_final_loop = false;
-
-//     loop {
-//         let mut transcription_tasks: Vec<tokio::task::JoinHandle<Result<(), String>>> = vec![];
-//         if shutdown_flag.load(Ordering::SeqCst) {
-//             if is_final_loop {
-//                 break;
-//             }
-//             is_final_loop = true;
-//         }
-
-//         let current_segments = load_segment_list(&chunks_dir.join("segment_list.txt"))
-//             .map_err(|e| e.to_string())?
-//             .difference(&watched_segments)
-//             .cloned()
-//             .collect::<HashSet<String>>();
-
-//         for segment_filename in &current_segments {
-//             let segment_path = chunks_dir.join(segment_filename);
-//             let transcription_path = chunks_dir.join(format!("{}.json", segment_filename));
-//             if segment_path.is_file() {
-//                 let segment_path_clone = segment_path.clone();
-//                 transcription_tasks.push(tokio::spawn(async move {
-//                     transcribe_wav_file_and_write(&segment_path_clone, &transcription_path)?;
-
-//                     Ok(())
-//                 }));
-//             }
-//             watched_segments.insert(segment_filename.clone());
-//         }
-
-//         if !transcription_tasks.is_empty() {
-//             let _ = join_all(transcription_tasks).await;
-//         }
-
-//         tokio::time::sleep(Duration::from_millis(50)).await;
-//     }
-//     transcription_finished.store(true, Ordering::SeqCst);
-//     Ok(())
-// }
 
 #[tauri::command]
 pub async fn get_real_time_transcription(

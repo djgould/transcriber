@@ -45,7 +45,7 @@
     "tauri-plugin-sql-api": "github:tauri-apps/tauri-plugin-sql#v2"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.0.0-beta.17",
+    "@tauri-apps/cli": "2.0.0-rc.18",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

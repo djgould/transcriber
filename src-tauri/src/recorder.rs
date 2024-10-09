@@ -1,6 +1,5 @@
 use coreaudio_sys::AudioObjectID;
 use log::info;
-use mac_notification_sys::{get_bundle_identifier_or_default, send_notification, set_application};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{self, ErrorKind, Write};
@@ -14,9 +13,12 @@ use tauri::async_runtime::Mutex;
 use tauri::State;
 use tokio::process::Command;
 
-use crate::commands::conversation;
+// Removed unused imports
+// use mac_notification_sys::{get_bundle_identifier_or_default, send_notification, set_application};
+// use crate::commands::conversation;
+// use crate::summarize::{generate_action_items, generate_title, summarize};
 use crate::media::MediaRecorder;
-use crate::summarize::{generate_action_items, generate_title, summarize, summarize_and_write};
+use crate::summarize::summarize_and_write;
 use crate::transcribe::{load_transcription, transcribe_wav_file_and_write};
 use crate::utils::ffmpeg_path_as_str;
 use crate::DeviceState;

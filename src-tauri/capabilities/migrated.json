@@ -7,18 +7,18 @@
     "tray-window"
   ],
   "permissions": [
-    "path:default",
-    "event:default",
-    "window:default",
-    "app:default",
-    "resources:default",
-    "menu:default",
-    "tray:default",
+    "core:path:default",
+    "core:event:default",
+    "core:window:default",
+    "core:app:default",
+    "core:resources:default",
+    "core:menu:default",
+    "core:tray:default",
     "sql:allow-load",
     "sql:allow-select",
     "sql:allow-execute",
-    "webview:default",
-    "webview:allow-internal-toggle-devtools",
+    "core:webview:default",
+    "core:webview:allow-internal-toggle-devtools",
     "fs:default",
     "dialog:default",
     "dialog:allow-save",
@@ -26,9 +26,8 @@
     "fs:allow-app-write-recursive",
     "fs:allow-appcache-write",
     "fs:allow-appcache-write-recursive",
-    "positioner:default",
     "notification:default",
-    "window:allow-hide",
-    "window:allow-show"
+    "core:window:allow-hide",
+    "core:window:allow-show"
   ]
 }
