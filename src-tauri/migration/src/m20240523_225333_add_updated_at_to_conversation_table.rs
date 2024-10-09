@@ -36,6 +36,5 @@ impl MigrationTrait for Migration {
 #[derive(DeriveIden)]
 enum Conversation {
     Table,
-    Id,
     UpdatedAt,
 }

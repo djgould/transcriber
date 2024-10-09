@@ -9,6 +9,7 @@ mod recorder;
 mod summarize;
 mod transcribe;
 mod utils;
+mod window;
 
 use audio::macos::aggregate_device::{
     create_input_aggregate_device, create_output_aggregate_device,
@@ -32,10 +33,10 @@ use tauri::tray::TrayIconEvent;
 use tauri::Manager;
 use tauri::WindowEvent;
 use tauri_plugin_log::{Target, TargetKind};
-use tauri_plugin_positioner::Position;
 use tauri_plugin_positioner::WindowExt;
 use transcribe::{get_complete_transcription, get_real_time_transcription};
 use uuid::Uuid;
+use window::setup_windows;
 
 use crate::device_listener::ActiveListener;
 use crate::recorder::{RecordingOptions, _start_recording, _stop_recording};
@@ -126,51 +127,9 @@ pub fn run() {
                 .build(),
         )
         .setup(move |app| {
-            let tray_window = Arc::new(app.app_handle().get_webview_window("tray-window").unwrap());
-            let _ = tray_window.set_visible_on_all_workspaces(true);
-            let _ = tray_window.hide();
-            let win_clone = tray_window.clone();
-            tray_window.on_window_event(move |event| match event {
-                WindowEvent::Focused(false) => {
-                    let _ = win_clone.hide();
-                }
-                _ => {}
-            });
-
-            let app_window = app.app_handle().get_webview_window("app-window").unwrap();
-            let _ = app_window.show();
-            TrayIconBuilder::with_id("my-tray")
-                .icon(Image::from_path(
-                    app.app_handle()
-                        .path()
-                        .resource_dir()
-                        .expect("failed to get resource dir")
-                        .join("icons/icon.ico"),
-                )?)
-                .on_tray_icon_event(|app, event| {
-                    tauri_plugin_positioner::on_tray_event(app.app_handle(), &event);
-                    match event {
-                        TrayIconEvent::Click { .. } => {
-                            let tray_window =
-                                app.app_handle().get_webview_window("tray-window").unwrap();
-                            let is_visible = tray_window.is_visible().unwrap();
-                            if !is_visible {
-                                let _ = tray_window
-                                    .as_ref()
-                                    .window()
-                                    .move_window(Position::TrayCenter);
-                                let _ = tray_window.as_ref().window().show();
-                                let _ = tray_window.set_focus();
-                            } else {
-                                let _ = tray_window.as_ref().window().hide();
-                            }
-                        }
-                        _ => {}
-                    }
-                })
-                .build(app)?;
-
             let handle = app.handle();
+
+            setup_windows(&handle).expect("Failed to setup windows");
 
             let data_directory = handle.path().app_data_dir().unwrap();
 
