@@ -62,19 +62,15 @@ const Page: NextPageWithLayout = () => {
   const editor = useCreateBlockNote();
 
   return (
-    <div className="p-2 h-screen flex flex-col gap-4">
-      <Card className="h-full">
-        <CardHeader>
-          <CardTitle className="text-lg">Your Converstations</CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-y-scroll h-full">
-          <BlockNoteView editor={editor} className="h-full" />
-          {/* <DataTable
+    <Card className="h-screen">
+      <CardContent className="flex-1 overflow-y-scroll pt-10">
+        <BlockNoteView editor={editor} className="h-full" />
+        {/* <DataTable
             columns={columns}
             data={conversations.data || []}
             pageSize={8}
           /> */}
-          {/* <Table>
+        {/* <Table>
             <TableCaption>A list of your recent conversations.</TableCaption>
             <TableHeader>
               <TableRow>
@@ -111,15 +107,13 @@ const Page: NextPageWithLayout = () => {
               ))}
             </TableBody>
           </Table> */}
-        </CardContent>
-        <CardFooter className="flex flex-col gap-4"></CardFooter>
-      </Card>
-    </div>
+      </CardContent>
+    </Card>
   );
 };
 
 Page.getLayout = function getLayout(page: ReactElement) {
-  return <MainLayout>{page}</MainLayout>;
+  return <>{page}</>;
 };
 
 export default Page;
