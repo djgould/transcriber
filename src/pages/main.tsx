@@ -53,40 +53,27 @@ import { NextPageWithLayout } from "./_app";
 import { DataTable } from "@/components/conversations/table/DataTable";
 import { columns } from "@/components/conversations/table/Columns";
 
+import "@blocknote/core/fonts/inter.css";
+import { BlockNoteView } from "@blocknote/shadcn";
+import "@blocknote/shadcn/style.css";
+import { useCreateBlockNote } from "@blocknote/react";
+
 const Page: NextPageWithLayout = () => {
-  const audioInputDevices = useAudioInputDevicesQuery();
-  const audioOutputDevices = useAudioOutputDevicesQuery();
-
-  const [selectedAudioInputDevice, setSelectedAudioInputDevice] = useAtom(
-    selectedAudioInputDeviceAtom
-  );
-  const [selectedAudioOutputDevice, setSelectedAudioOutputDevice] = useAtom(
-    selectedAudioOutputDeviceAtom
-  );
-  const [activeRecordingInfo, setActiveRecordingInfo] = useState<
-    { conversation_id: number; status: "recording" | "stopping" } | undefined
-  >();
-
-  const startRecorderMutation = useStartRecorderMutation();
-  const stopRecorderMutation = useStopRecorderMutation();
-
-  const conversations = useConversations(1, 30);
-  const createConversationMutation = useCreateConversationMutation();
-  const deleteConversationMutation = useDeleteConversationMutation();
+  const editor = useCreateBlockNote();
 
   return (
     <div className="p-2 h-screen flex flex-col gap-4">
-      <Card>
+      <Card className="h-full">
         <CardHeader>
           <CardTitle className="text-lg">Your Converstations</CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 overflow-y-scroll">
-          <DataTable
+        <CardContent className="flex-1 overflow-y-scroll h-full">
+          <BlockNoteView editor={editor} className="h-full" />
+          {/* <DataTable
             columns={columns}
             data={conversations.data || []}
             pageSize={8}
-          />
-
+          /> */}
           {/* <Table>
             <TableCaption>A list of your recent conversations.</TableCaption>
             <TableHeader>
