@@ -24,14 +24,14 @@ export const useConversation = (conversationId: number) => {
 export const useConversations = (page: number, itemsPerPage: number) => {
   console.log("use conversations");
   const conversations = useQuery({
-    queryKey: ["conversations"],
+    queryKey: ["conversations", page, itemsPerPage],
     queryFn: async () => {
-      const conversations = await invoke("get_conversations", {
-        page: page,
-        itemsPerPage: itemsPerPage,
-      });
+      const [conversations, numPages] = (await invoke("get_conversations", {
+        page,
+        itemsPerPage,
+      })) as [Conversation[], number];
       console.log(conversations);
-      return conversations as any;
+      return { conversations, numPages };
     },
   });
 

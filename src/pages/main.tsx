@@ -20,7 +20,7 @@ import {
   useStartRecorderMutation,
   useStopRecorderMutation,
 } from "@/hooks/useRecorder";
-import { Circle, Eye, Loader, Trash } from "lucide-react";
+import { Calendar, Circle, Eye, Loader, Menu, Mic, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import clsx from "clsx";
 import {
@@ -58,12 +58,71 @@ import { BlockNoteView } from "@blocknote/shadcn";
 import "@blocknote/shadcn/style.css";
 import { useCreateBlockNote } from "@blocknote/react";
 
+interface Meeting {
+  title: string;
+  time: string;
+}
+
 const Page: NextPageWithLayout = () => {
+  const [isRecording, setIsRecording] = useState(false);
   const editor = useCreateBlockNote();
+
+  const upcomingMeeting: Meeting = {
+    title: "Team Sync",
+    time: "2:00 PM",
+  };
 
   return (
     <Card className="h-screen">
-      <CardContent className="flex-1 overflow-y-scroll pt-10">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          {/* Menu Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-white hover:bg-gray-800"
+          >
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">Toggle menu</span>
+          </Button>
+
+          <div className="flex items-center space-x-2">
+            {/* Meeting Indicator */}
+            {upcomingMeeting && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden sm:flex items-center space-x-2 text-xs text-gray-300 hover:text-white hover:bg-gray-800"
+              >
+                <Calendar className="h-4 w-4" />
+                <span>
+                  {upcomingMeeting.title} • {upcomingMeeting.time}
+                </span>
+              </Button>
+            )}
+
+            {/* Recording Button */}
+            <Button
+              variant={isRecording ? "destructive" : "ghost"}
+              size="icon"
+              onClick={() => setIsRecording(!isRecording)}
+              className={`transition-colors duration-200 ${
+                isRecording
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : "text-white hover:bg-gray-800"
+              }`}
+            >
+              <Mic
+                className={`h-5 w-5 ${isRecording ? "animate-pulse" : ""}`}
+              />
+              <span className="sr-only">
+                {isRecording ? "Stop recording" : "Start recording"}
+              </span>
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-y-scroll">
         <BlockNoteView editor={editor} className="h-full" />
         {/* <DataTable
             columns={columns}

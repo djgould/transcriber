@@ -53,7 +53,7 @@
       {
         "label": "tray-window",
         "fullscreen": false,
-        "height": 600,
+        "height": 640,
         "resizable": true,
         "title": "platy",
         "width": 300,

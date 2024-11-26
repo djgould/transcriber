@@ -21,7 +21,16 @@ import {
   useStartRecorderMutation,
   useStopRecorderMutation,
 } from "@/hooks/useRecorder";
-import { Circle, Eye, Loader, Trash } from "lucide-react";
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Eye,
+  Loader,
+  Trash,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import clsx from "clsx";
 import {
@@ -74,12 +83,13 @@ const Page: NextPageWithLayout = () => {
   const [activeRecordingInfo, setActiveRecordingInfo] = useState<
     { conversation_id: number; status: "recording" | "stopping" } | undefined
   >();
+  const [currentPage, setCurrentPage] = useState(1);
 
   const startRecorderMutation = useStartRecorderMutation();
   const stopRecorderMutation = useStopRecorderMutation();
   const isRecording = useIsRecording();
 
-  const conversations = useConversations(1, 30);
+  const conversations = useConversations(currentPage, 3);
   const createConversationMutation = useCreateConversationMutation();
   const deleteConversationMutation = useDeleteConversationMutation();
 
@@ -87,8 +97,15 @@ const Page: NextPageWithLayout = () => {
     await invoke("open_conversation", { conversationId });
   };
 
+  interface Conversation {
+    id: number;
+    created_at: string;
+    updated_at: string;
+  }
+
   return (
-    <div className="pt-2 h-screen flex flex-col gap-4">
+    <div className="w-[300px] min-h-screen bg-background text-foreground p-4 flex flex-col space-y-4 dark">
+      {/* Audio Settings */}
       <Select
         value={selectedAudioInputDevice}
         onValueChange={(value) => {
@@ -96,7 +113,7 @@ const Page: NextPageWithLayout = () => {
           setSelectedAudioInputDevice(value);
         }}
       >
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="w-full bg-card text-sm">
           <SelectValue placeholder={selectedAudioInputDevice} />
         </SelectTrigger>
         <SelectContent>
@@ -107,6 +124,7 @@ const Page: NextPageWithLayout = () => {
           ))}
         </SelectContent>
       </Select>
+
       <Select
         value={selectedAudioOutputDevice}
         onValueChange={(value) => {
@@ -114,7 +132,7 @@ const Page: NextPageWithLayout = () => {
           setSelectedAudioOutputDevice(value);
         }}
       >
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="w-full bg-card text-sm">
           <SelectValue placeholder={selectedAudioOutputDevice} />
         </SelectTrigger>
         <SelectContent>
@@ -125,21 +143,113 @@ const Page: NextPageWithLayout = () => {
           ))}
         </SelectContent>
       </Select>
+
+      <div className="w-full h-[1px] bg-border my-2"></div>
+
+      {/* Record Button */}
       <RecordingButton />
-      <Card className="my-0">
-        <CardHeader className="py-4">
-          <CardTitle className="text-lg text-center">
-            Your Converstations
+
+      {/* Upcoming Meetings */}
+      <Card className="bg-card">
+        <CardHeader className="py-2 px-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Upcoming Meetings
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex-1 overflow-y-scroll py-0 my-0">
-          <DataTable
-            columns={columns}
-            data={conversations.data || []}
-            pageSize={3}
-          />
+        <CardContent className="py-2 px-4">
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between items-center p-2 bg-muted rounded">
+              <div>
+                <h3 className="font-medium">Team Sync</h3>
+                <p className="text-muted-foreground">Today, 2:00 PM</p>
+              </div>
+              <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
+                Join
+              </Button>
+            </div>
+            <div className="flex justify-between items-center p-2 bg-muted rounded">
+              <div>
+                <h3 className="font-medium">Project Review</h3>
+                <p className="text-muted-foreground">Tomorrow, 10:00 AM</p>
+              </div>
+              <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
+                Join
+              </Button>
+            </div>
+          </div>
         </CardContent>
-        <CardFooter className="flex flex-col gap-4"></CardFooter>
+      </Card>
+
+      {/* Conversations */}
+      <Card className="bg-card">
+        <CardHeader className="py-2 px-4">
+          <CardTitle className="text-sm font-semibold">
+            Your Conversations
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-2 px-4">
+          <div className="space-y-2 text-xs">
+            {conversations.data?.conversations.map(
+              (conversation: Conversation) => (
+                <div
+                  key={conversation.id}
+                  className="flex justify-between items-center p-2 bg-muted rounded"
+                >
+                  <span>
+                    {new Date(conversation.created_at).toLocaleDateString()}
+                  </span>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => viewConversation(conversation.id)}
+                    >
+                      <Eye className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() =>
+                        deleteConversationMutation.mutate({
+                          conversationId: conversation.id,
+                        })
+                      }
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        </CardContent>
+        <CardFooter className="flex justify-between pt-2 text-xs">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-muted-foreground"
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            <ChevronLeft className="h-3 w-3 mr-1" />
+            Previous
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2"
+            onClick={() => setCurrentPage((prev) => prev + 1)}
+            disabled={
+              !conversations.data || currentPage >= conversations.data.numPages
+            }
+          >
+            Next
+            <ChevronRight className="h-3 w-3 ml-1" />
+          </Button>
+        </CardFooter>
       </Card>
     </div>
   );

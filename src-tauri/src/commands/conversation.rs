@@ -3,10 +3,7 @@ use std::sync::Arc;
 
 use entity::conversation::{self, Model as ConversationModel};
 use log::info;
-use service::{
-    sea_orm::{TryIntoModel},
-    Mutation, Query,
-};
+use service::{sea_orm::TryIntoModel, Mutation, Query};
 
 use crate::{recorder::RecordingState, summarize::SummaryJSON, AppState};
 
@@ -40,14 +37,14 @@ pub async fn get_conversations(
     state: tauri::State<'_, AppState>,
     page: u64,
     items_per_page: u64,
-) -> Result<Vec<conversation::Model>, ()> {
+) -> Result<(Vec<conversation::Model>, u64), ()> {
     info!("getting conversations...");
-    let (conversations, _num_pages) =
+    let (conversations, num_pages) =
         Query::find_conversations_in_page(&state.db, page, items_per_page)
             .await
             .expect("Cannot find posts in page");
 
-    Ok(conversations)
+    Ok((conversations, num_pages))
 }
 
 #[tauri::command]
