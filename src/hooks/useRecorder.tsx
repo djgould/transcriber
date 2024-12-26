@@ -96,6 +96,8 @@ export function useIsRecording() {
     queryFn: async () => {
       return await invoke<boolean>("is_recording");
     },
+    refetchInterval: 500,
+    staleTime: 0,
   });
 
   return isRecordingQuery;

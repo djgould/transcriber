@@ -5,10 +5,14 @@ import {
   useStopRecorderMutation,
 } from "@/hooks/useRecorder";
 import { Button } from "../ui/button";
-import { Circle, Loader } from "lucide-react";
+import { Circle, Loader, Mic } from "lucide-react";
 import clsx from "clsx";
 
-export function RecordingButton() {
+interface RecordingButtonProps {
+  variant?: "main" | "tray";
+}
+
+export function RecordingButton({ variant = "tray" }: RecordingButtonProps) {
   const createConversationMutation = useCreateConversationMutation();
   const startRecorderMutation = useStartRecorderMutation();
   const stopRecorderMutation = useStopRecorderMutation();
@@ -44,9 +48,32 @@ export function RecordingButton() {
     </Button>;
   }
 
+  if (variant === "tray") {
+    return (
+      <Button
+        variant="outline"
+        disabled={stopRecorderMutation.isPending}
+        onClick={() => {
+          if (isRecording.data) {
+            stopRecording();
+          } else {
+            startRecording();
+          }
+        }}
+      >
+        {isRecording.data ? (
+          <Circle className={clsx("text-red-800 fill-red-800 animate-pulse")} />
+        ) : (
+          <Circle className={clsx("text-red-800")} />
+        )}
+      </Button>
+    );
+  }
+
   return (
     <Button
-      variant="outline"
+      variant={isRecording.data ? "destructive" : "ghost"}
+      size="icon"
       disabled={stopRecorderMutation.isPending}
       onClick={() => {
         if (isRecording.data) {
@@ -55,12 +82,16 @@ export function RecordingButton() {
           startRecording();
         }
       }}
+      className={`transition-colors duration-200 ${
+        isRecording.data
+          ? "bg-red-600 hover:bg-red-700 text-white"
+          : "text-white hover:bg-gray-800"
+      }`}
     >
-      {isRecording.data ? (
-        <Circle className={clsx("text-red-800 fill-red-800 animate-pulse")} />
-      ) : (
-        <Circle className={clsx("text-red-800")} />
-      )}
+      <Mic className={`h-5 w-5 ${isRecording.data ? "animate-pulse" : ""}`} />
+      <span className="sr-only">
+        {isRecording.data ? "Stop recording" : "Start recording"}
+      </span>
     </Button>
   );
 }

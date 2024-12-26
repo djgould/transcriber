@@ -52,6 +52,7 @@ import { MainLayout } from "@/components/layout/main";
 import { NextPageWithLayout } from "./_app";
 import { DataTable } from "@/components/conversations/table/DataTable";
 import { columns } from "@/components/conversations/table/Columns";
+import { RecordingButton } from "@/components/recording/RecordingButton";
 
 import "@blocknote/core/fonts/inter.css";
 import { BlockNoteView } from "@blocknote/shadcn";
@@ -64,7 +65,6 @@ interface Meeting {
 }
 
 const Page: NextPageWithLayout = () => {
-  const [isRecording, setIsRecording] = useState(false);
   const editor = useCreateBlockNote();
 
   const upcomingMeeting: Meeting = {
@@ -102,23 +102,7 @@ const Page: NextPageWithLayout = () => {
             )}
 
             {/* Recording Button */}
-            <Button
-              variant={isRecording ? "destructive" : "ghost"}
-              size="icon"
-              onClick={() => setIsRecording(!isRecording)}
-              className={`transition-colors duration-200 ${
-                isRecording
-                  ? "bg-red-600 hover:bg-red-700 text-white"
-                  : "text-white hover:bg-gray-800"
-              }`}
-            >
-              <Mic
-                className={`h-5 w-5 ${isRecording ? "animate-pulse" : ""}`}
-              />
-              <span className="sr-only">
-                {isRecording ? "Stop recording" : "Start recording"}
-              </span>
-            </Button>
+            <RecordingButton variant="main" />
           </div>
         </div>
       </CardHeader>
